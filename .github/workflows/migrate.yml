@@ -1,7 +1,7 @@
 name: Multi Repo Migration
 
 on:
-  workflow_dispatch:   # manual trigger
+  workflow_dispatch:   # Manual trigger
 
 jobs:
   migrate:
@@ -17,20 +17,21 @@ jobs:
           sudo apt install gh -y
 
       - name: Install GHI extension
+        env:
+          GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
         run: |
           gh extension install github/gh-gei
 
-      - name: Authenticate GitHub CLI
-        run: |
-          echo "${{ secrets.GH_TARGET_PAT }}" | gh auth login --with-token
-
       - name: Run migration for repos
         env:
+          GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}   # Required for gh CLI
           GH_SOURCE_PAT: ${{ secrets.GH_SOURCE_PAT }}
           GH_TARGET_PAT: ${{ secrets.GH_TARGET_PAT }}
         run: |
           while read repo; do
+            echo "=============================="
             echo "Migrating $repo..."
+            echo "=============================="
 
             gh gei migrate-repo \
               --github-source-org ambika-org2 \
