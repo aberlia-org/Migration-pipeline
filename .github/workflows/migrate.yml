@@ -1,4 +1,3 @@
-name: Multi Repo Migration
 
 on:
   workflow_dispatch:
@@ -6,9 +5,6 @@ on:
 jobs:
   migrate:
     runs-on: ubuntu-latest
-
-    env:   # ⭐ GLOBAL ENV (IMPORTANT FIX)
-      GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
 
     steps:
       - name: Checkout code
@@ -19,16 +15,21 @@ jobs:
           sudo apt update
           sudo apt install gh -y
 
-      - name: Verify GH CLI Auth
-        run: |
-          gh auth status
-
       - name: Install GHI extension
+        env:
+          GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
         run: |
           gh extension install github/gh-gei
 
+      - name: Verify GH Auth
+        env:
+          GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
+        run: |
+          gh auth status
+
       - name: Run migration for repos
         env:
+          GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
           GH_SOURCE_PAT: ${{ secrets.GH_SOURCE_PAT }}
           GH_TARGET_PAT: ${{ secrets.GH_TARGET_PAT }}
         run: |
