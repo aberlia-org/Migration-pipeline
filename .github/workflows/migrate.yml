@@ -1,3 +1,4 @@
+name: Multi Repo Migration
 
 on:
   workflow_dispatch:
@@ -10,26 +11,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Install GitHub CLI
-        run: |
-          sudo apt update
-          sudo apt install gh -y
+      # ✅ Install GitHub CLI properly
+      - name: Setup GitHub CLI
+        uses: cli/cli-action@v2
+        with:
+          token: ${{ secrets.GH_TARGET_PAT }}
 
+      # ✅ Install GHI extension
       - name: Install GHI extension
-        env:
-          GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
-        run: |
-          gh extension install github/gh-gei
+        run: gh extension install github/gh-gei
 
-      - name: Verify GH Auth
-        env:
-          GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
-        run: |
-          gh auth status
+      # ✅ Verify auth (optional but helpful)
+      - name: Verify auth
+        run: gh auth status
 
+      # ✅ Run migration
       - name: Run migration for repos
         env:
-          GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
           GH_SOURCE_PAT: ${{ secrets.GH_SOURCE_PAT }}
           GH_TARGET_PAT: ${{ secrets.GH_TARGET_PAT }}
         run: |
