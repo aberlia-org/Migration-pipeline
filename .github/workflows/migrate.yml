@@ -11,7 +11,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # ✅ Install GitHub CLI properly
+      # ✅ Proper GitHub CLI setup (NO apt)
       - name: Setup GitHub CLI
         uses: cli/cli-action@v2
         with:
@@ -21,7 +21,7 @@ jobs:
       - name: Install GHI extension
         run: gh extension install github/gh-gei
 
-      # ✅ Verify auth (optional but helpful)
+      # ✅ Verify auth
       - name: Verify auth
         run: gh auth status
 
