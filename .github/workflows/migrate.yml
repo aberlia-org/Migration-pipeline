@@ -11,25 +11,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # ✅ Install GitHub CLI (default already available, but safe)
+      # Install GitHub CLI (default already available, but safe)
       - name: Setup GH CLI
         run: gh --version
 
-      # ✅ Install GHI extension
+      # Install GHI extension
       - name: Install GHI extension
         env:
           GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
         run: |
           gh extension install github/gh-gei
 
-      # ✅ Verify authentication
+      # Verify authentication
       - name: Verify auth
         env:
           GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
         run: |
           gh auth status
 
-      # ✅ Run migration
+      # Run migration
       - name: Run migration for repos
         env:
           GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
