@@ -1,0 +1,43 @@
+name: Multi Repo Migration
+
+on:
+  workflow_dispatch:   # manual trigger
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install GitHub CLI
+        run: |
+          sudo apt update
+          sudo apt install gh -y
+
+      - name: Install GHI extension
+        run: |
+          gh extension install github/gh-gei
+
+      - name: Authenticate GitHub CLI
+        run: |
+          echo "${{ secrets.GH_TARGET_PAT }}" | gh auth login --with-token
+
+      - name: Run migration for repos
+        env:
+          GH_SOURCE_PAT: ${{ secrets.GH_SOURCE_PAT }}
+          GH_TARGET_PAT: ${{ secrets.GH_TARGET_PAT }}
+        run: |
+          while read repo; do
+            echo "Migrating $repo..."
+
+            gh gei migrate-repo \
+              --github-source-org ambika-org2 \
+              --github-target-org aberlia-org \
+              --source-repo $repo \
+              --target-repo $repo \
+              --github-source-pat $GH_SOURCE_PAT \
+              --github-target-pat $GH_TARGET_PAT
+
+          done < repos.txt
