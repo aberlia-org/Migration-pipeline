@@ -1,2 +1,1 @@
-java-maven-war-appD
 hashicorp
