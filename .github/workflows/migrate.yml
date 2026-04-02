@@ -55,7 +55,7 @@ jobs:
 
             cd $repo
 
-            # Sonar Scan (no Java dependency now)
+            # Sonar Scan
             sonar-scanner \
               -Dsonar.projectKey=$repo \
               -Dsonar.organization=aberlia-org \
