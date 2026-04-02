@@ -8,18 +8,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout pipeline repo
       - name: Checkout pipeline repo
         uses: actions/checkout@v3
 
-      # Install GHI extension (with auth)
       - name: Install GHI extension
         env:
           GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
         run: |
           gh extension install github/gh-gei
 
-      # Install Sonar Scanner
       - name: Install Sonar Scanner
         run: |
           sudo apt update
@@ -29,7 +26,6 @@ jobs:
           mv sonar-scanner-* sonar-scanner
           echo "$PWD/sonar-scanner/bin" >> $GITHUB_PATH
 
-      # Migrate + Scan
       - name: Migrate and Scan Repos
         env:
           GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
@@ -39,27 +35,23 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
           while read repo; do
-            echo "=============================="
             echo "Processing $repo..."
-            echo "=============================="
 
-            # Step 1: Migration
             gh gei migrate-repo \
               --github-source-org ambika-org2 \
               --github-target-org aberlia-org \
               --source-repo $repo \
               --target-repo $repo \
               --github-source-pat $GH_SOURCE_PAT \
-              --github-target-pat $GH_TARGET_PAT
+              --github-target-pat $GH_TARGET_PAT || true
 
-            # Step 2: Clone using token (FIXED)
             git clone https://x-access-token:$GH_TARGET_PAT@github.com/aberlia-org/$repo.git
 
             cd $repo
 
-            # Step 3: Sonar Analysis
             sonar-scanner \
               -Dsonar.projectKey=$repo \
+              -Dsonar.organization=YOUR_ORG_NAME \
               -Dsonar.sources=. \
               -Dsonar.host.url=$SONAR_HOST_URL \
               -Dsonar.login=$SONAR_TOKEN
