@@ -19,12 +19,6 @@ jobs:
         run: |
           gh extension install github/gh-gei
 
-      # Install Java + Maven (for Java projects)
-      - name: Install Java and Maven
-        run: |
-          sudo apt update
-          sudo apt install -y maven openjdk-17-jdk
-
       # Install Sonar Scanner
       - name: Install Sonar Scanner
         run: |
@@ -47,7 +41,7 @@ jobs:
             echo "Processing $repo..."
             echo "=============================="
 
-            # Migration (skip if already exists)
+            # Migration
             gh gei migrate-repo \
               --github-source-org ambika-org2 \
               --github-target-org aberlia-org \
@@ -56,21 +50,19 @@ jobs:
               --github-source-pat $GH_SOURCE_PAT \
               --github-target-pat $GH_TARGET_PAT || true
 
-            # Clone with authentication
+            # Clone repo
             git clone https://x-access-token:$GH_TARGET_PAT@github.com/aberlia-org/$repo.git
 
             cd $repo
 
-            # Build project (required for Java)
-            mvn clean install -DskipTests || echo "Skipping build (not a Maven project)"
-
-            # Sonar Analysis
+            # Sonar Scan (no Java dependency now)
             sonar-scanner \
               -Dsonar.projectKey=$repo \
               -Dsonar.organization=aberlia-org \
               -Dsonar.sources=. \
               -Dsonar.host.url=$SONAR_HOST_URL \
-              -Dsonar.login=$SONAR_TOKEN
+              -Dsonar.login=$SONAR_TOKEN \
+              -Dsonar.java.binaries=.
 
             cd ..
             rm -rf $repo
