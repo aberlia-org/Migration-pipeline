@@ -19,11 +19,15 @@ jobs:
         run: |
           gh extension install github/gh-gei
 
+      # Install Java + Maven (for Java projects)
+      - name: Install Java and Maven
+        run: |
+          sudo apt update
+          sudo apt install -y maven openjdk-17-jdk
+
       # Install Sonar Scanner
       - name: Install Sonar Scanner
         run: |
-          sudo apt update
-          sudo apt install unzip -y
           curl -sSLo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
           unzip sonar-scanner.zip
           mv sonar-scanner-* sonar-scanner
@@ -52,12 +56,15 @@ jobs:
               --github-source-pat $GH_SOURCE_PAT \
               --github-target-pat $GH_TARGET_PAT || true
 
-            # Clone with auth (FIXED)
+            # Clone with authentication
             git clone https://x-access-token:$GH_TARGET_PAT@github.com/aberlia-org/$repo.git
 
             cd $repo
 
-            # Sonar Analysis (FIXED)
+            # Build project (required for Java)
+            mvn clean install -DskipTests || echo "Skipping build (not a Maven project)"
+
+            # Sonar Analysis
             sonar-scanner \
               -Dsonar.projectKey=$repo \
               -Dsonar.organization=aberlia-org \
