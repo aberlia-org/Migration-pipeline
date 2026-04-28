@@ -12,7 +12,7 @@ jobs:
       - name: Checkout pipeline repo
         uses: actions/checkout@v3
 
-      # Install GHI extension
+      # Install GEI
       - name: Install GHI extension
         env:
           GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
