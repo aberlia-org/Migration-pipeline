@@ -14,12 +14,11 @@ jobs:
       - name: Checkout pipeline repo
         uses: actions/checkout@v4
 
-      # Install GEI — fixed: gh auth login before extension install
+      # # Install GEI
       - name: Install GHI extension
         env:
           GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
         run: |
-          gh auth login --with-token <<< "$GH_TOKEN"
           gh extension install github/gh-gei
 
       # Install Gitleaks
