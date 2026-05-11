@@ -1,5 +1,4 @@
-
-name: Migration + Sonar Analysis pre and post
+name: Migration + Sonar Analysisp
 
 on:
  workflow_dispatch:
