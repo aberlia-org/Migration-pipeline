@@ -30,32 +30,4 @@ jobs:
 
       - name: Install Sonar Scanner
         run: |
-          curl -sSLo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
-          unzip sonar-scanner.zip
-          mv sonar-scanner-* sonar-scanner
-          echo "$PWD/sonar-scanner/bin" >> $GITHUB_PATH
-
-      - name: Migrate and Scan Repos
-        env:
-          GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
-          GH_SOURCE_PAT: ${{ secrets.GH_SOURCE_PAT }}
-          GH_TARGET_PAT: ${{ secrets.GH_TARGET_PAT }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
-        run: |
-          mkdir -p sarif-reports
-          touch /tmp/failed_repos.txt
-          SECRETS_FOUND=0
-
-          while read repo; do
-            [ -z "$repo" ] && continue
-            echo "=============================="
-            echo "Processing $repo..."
-            echo "=============================="
-
-            # Migration
-            gh gei migrate-repo \
-              --github-source-org ambika-org2 \
-              --github-target-org aberlia-org \
-              --source-repo "$repo" \
+          curl -sSLo sonar-scanner.zip https://binaries.sonarsource.com/Distri
