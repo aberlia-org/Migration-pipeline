@@ -7,21 +7,22 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write        # ← NEW: needed to upload SARIF to GitHub Security tab
+      security-events: write
 
     steps:
       # Checkout pipeline repo
       - name: Checkout pipeline repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      # Install GEI
+      # Install GEI — fixed: gh auth login before extension install
       - name: Install GHI extension
         env:
           GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
         run: |
+          gh auth login --with-token <<< "$GH_TOKEN"
           gh extension install github/gh-gei
 
-      # ── NEW: Install Gitleaks binary ────────────────────────────────
+      # Install Gitleaks
       - name: Install Gitleaks
         run: |
           curl -sSLo gitleaks.tar.gz \
@@ -29,7 +30,6 @@ jobs:
           tar -xzf gitleaks.tar.gz gitleaks
           sudo mv gitleaks /usr/local/bin/gitleaks
           gitleaks version
-      # ───────────────────────────────────────────────────────────────
 
       # Install Sonar Scanner
       - name: Install Sonar Scanner
@@ -39,7 +39,7 @@ jobs:
           mv sonar-scanner-* sonar-scanner
           echo "$PWD/sonar-scanner/bin" >> $GITHUB_PATH
 
-      # Migrate + Scan
+      # Migrate + Gitleaks + Sonar
       - name: Migrate and Scan Repos
         env:
           GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
@@ -47,12 +47,12 @@ jobs:
           GH_TARGET_PAT: ${{ secrets.GH_TARGET_PAT }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}   # ← NEW: free license for org repos
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
         run: |
-          # ── NEW: track whether any repo had secrets ─────────────────
+          mkdir -p sarif-reports json-reports
+
           SECRETS_FOUND=0
           FAILED_REPOS=""
-          # ────────────────────────────────────────────────────────────
 
           while read repo; do
             echo "=============================="
@@ -63,75 +63,88 @@ jobs:
             gh gei migrate-repo \
               --github-source-org ambika-org2 \
               --github-target-org aberlia-org \
-              --source-repo $repo \
-              --target-repo $repo \
-              --github-source-pat $GH_SOURCE_PAT \
-              --github-target-pat $GH_TARGET_PAT || true
+              --source-repo "$repo" \
+              --target-repo "$repo" \
+              --github-source-pat "$GH_SOURCE_PAT" \
+              --github-target-pat "$GH_TARGET_PAT" || true
 
             # Clone repo
             git clone https://x-access-token:$GH_TARGET_PAT@github.com/aberlia-org/$repo.git
-            cd $repo
+            cd "$repo"
 
-            # ── NEW: Gitleaks scan (full history) ─────────────────────
+            # Gitleaks scan — full history, all branches
             echo "--- Running Gitleaks on $repo ---"
             gitleaks detect \
               --source . \
               --log-opts="--all" \
               --report-format sarif \
-              --report-path ../gitleaks-$repo.sarif \
-              --report-format json \
-              --report-path ../gitleaks-$repo.json \
+              --report-path "../sarif-reports/$repo.sarif" \
               --exit-code 1 \
-              --verbose || {
-                echo "SECRETS DETECTED in $repo — skipping Sonar scan"
-                SECRETS_FOUND=1
-                FAILED_REPOS="$FAILED_REPOS $repo"
-                cd ..
-                rm -rf $repo
-                continue       # skip Sonar for this repo, move to next
-              }
-            echo "Gitleaks: no secrets found in $repo"
-            # ─────────────────────────────────────────────────────────
+              --verbose
 
-            # Sonar Scan (only runs if Gitleaks passed)
+            GITLEAKS_EXIT=$?
+
+            if [ $GITLEAKS_EXIT -ne 0 ]; then
+              echo "SECRETS DETECTED in $repo — skipping Sonar scan"
+              SECRETS_FOUND=1
+              FAILED_REPOS="$FAILED_REPOS $repo"
+              cd ..
+              rm -rf "$repo"
+              continue
+            fi
+
+            echo "Gitleaks clean — running Sonar on $repo"
+
+            # Sonar Scan
             sonar-scanner \
-              -Dsonar.projectKey=$repo \
+              -Dsonar.projectKey="$repo" \
               -Dsonar.organization=aberlia-org \
               -Dsonar.sources=. \
               -Dsonar.host.url=$SONAR_HOST_URL \
               -Dsonar.login=$SONAR_TOKEN
 
             cd ..
-            rm -rf $repo
+            rm -rf "$repo"
 
           done < repos.txt
 
-          # ── NEW: fail the job if any repo had secrets ───────────────
+          # Fail the job if any repo had secrets
           if [ $SECRETS_FOUND -eq 1 ]; then
-            echo ""
             echo "=========================================="
-            echo "MIGRATION BLOCKED for the following repos:"
+            echo "MIGRATION BLOCKED — secrets found in:"
             echo "$FAILED_REPOS"
-            echo "Rotate the leaked secrets and re-run."
+            echo "Rotate the leaked credentials and re-run."
             echo "=========================================="
             exit 1
           fi
-          # ────────────────────────────────────────────────────────────
 
-      # ── NEW: Upload all SARIF reports to GitHub Security tab ────────
+      # Upload SARIF reports — fixed: v4, directory path, guard for empty
       - name: Upload Gitleaks SARIF reports
-        if: always()    # run even if the job failed — so you can see findings
-        uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('sarif-reports/*.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: "*.sarif"
+          sarif_file: sarif-reports
           category: gitleaks-migration
 
-      # ── NEW: Upload JSON reports as artifacts ───────────────────────
-      - name: Archive Gitleaks JSON reports
-        if: always()
+      # Archive SARIF + JSON as artifacts
+      - name: Archive Gitleaks reports
+        if: always() && hashFiles('sarif-reports/*.sarif') != ''
         uses: actions/upload-artifact@v4
         with:
           name: gitleaks-reports
-          path: "*.json"
+          path: sarif-reports/
           retention-days: 30
-      # ─────────────────────────────────────────────────────────────────
+
+      # Post summary to job output
+      - name: Post scan summary
+        if: always()
+        run: |
+          echo "## Gitleaks Scan Summary" >> $GITHUB_STEP_SUMMARY
+          if ls sarif-reports/*.sarif 1>/dev/null 2>&1; then
+            echo "Reports generated for:" >> $GITHUB_STEP_SUMMARY
+            for f in sarif-reports/*.sarif; do
+              echo "- $(basename $f .sarif)" >> $GITHUB_STEP_SUMMARY
+            done
+          else
+            echo "No reports generated (pipeline may have failed before scan)" >> $GITHUB_STEP_SUMMARY
+          fi
