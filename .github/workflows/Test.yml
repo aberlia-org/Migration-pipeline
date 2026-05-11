@@ -1,107 +1,124 @@
 name: Migration + Sonar AnalysisP
 
 on:
- workflow_dispatch:
+  workflow_dispatch:  # 2-space indent — only manual trigger
 
 jobs:
- migrate-and-scan:
-   runs-on: ubuntu-latest
+  migrate-and-scan:
+    runs-on: ubuntu-latest
+    steps:
 
-   steps:
+      - name: Checkout pipeline repo
+        uses: actions/checkout@v3
 
-     # Checkout pipeline repo
-     - name: Checkout pipeline repo
-       uses: actions/checkout@v3
+      - name: Install GHE extension
+        env:
+          GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
+        run: |
+          gh extension install github/gh-gei
 
-     # Install GEI
-     - name: Install GHE extension
-       env:
-         GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
-       run: |
-         gh extension install github/gh-gei
+      - name: Install Sonar Scanner
+        run: |
+          curl -sSLo sonar-scanner.zip \
+            https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+          unzip sonar-scanner.zip
+          mv sonar-scanner-* sonar-scanner
+          echo "$PWD/sonar-scanner/bin" >> $GITHUB_PATH
 
-     # Install Sonar Scanner
-     - name: Install Sonar Scanner
-       run: |
-         curl -sSLo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
-         unzip sonar-scanner.zip
-         mv sonar-scanner-* sonar-scanner
-         echo "$PWD/sonar-scanner/bin" >> $GITHUB_PATH
+      - name: Migrate and Scan Repos
+        env:
+          GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
+          GH_SOURCE_PAT: ${{ secrets.GH_SOURCE_PAT }}
+          GH_TARGET_PAT: ${{ secrets.GH_TARGET_PAT }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          FAILED_REPOS=""
 
-     # Process repos
-     - name: Migrate and Scan Repos
-       env:
-         GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
-         GH_SOURCE_PAT: ${{ secrets.GH_SOURCE_PAT }}
-         GH_TARGET_PAT: ${{ secrets.GH_TARGET_PAT }}
-         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-         SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          while read repo; do
+            echo "====================================="
+            echo "Processing repo: $repo"
+            echo "====================================="
 
-       run: |
+            ##################################################
+            # STEP 1: CLONE SOURCE + PRE-MIGRATION SONAR SCAN
+            ##################################################
+            echo "--- [PRE-MIGRATION] Cloning $repo from source org ---"
+            if ! git clone https://x-access-token:$GH_SOURCE_PAT@github.com/ambika-org2/$repo.git "source-$repo"; then
+              echo "ERROR: Source clone failed for $repo — skipping"
+              FAILED_REPOS="$FAILED_REPOS $repo(source-clone-failed)"
+              continue
+            fi
 
-         while read repo; do
+            echo "--- [PRE-MIGRATION] Sonar scan on $repo ---"
+            if ! sonar-scanner \
+              -Dsonar.projectKey="${repo}-source" \
+              -Dsonar.organization=aberlia-org \
+              -Dsonar.sources="source-$repo" \
+              -Dsonar.host.url="$SONAR_HOST_URL" \
+              -Dsonar.login="$SONAR_TOKEN"; then
+              echo "ERROR: Pre-migration Sonar scan failed for $repo — skipping migration"
+              FAILED_REPOS="$FAILED_REPOS $repo(pre-scan-failed)"
+              rm -rf "source-$repo"
+              continue
+            fi
 
-           echo "====================================="
-           echo "Processing repo: $repo"
-           echo "====================================="
+            rm -rf "source-$repo"
+            echo "Pre-migration scan complete for $repo"
 
-           ##################################################
-           # CLONE SOURCE REPO
-           ##################################################
+            ##################################################
+            # STEP 2: MIGRATE REPO
+            ##################################################
+            echo "--- Migrating $repo ---"
+            if ! gh gei migrate-repo \
+              --github-source-org ambika-org2 \
+              --github-target-org aberlia-org \
+              --source-repo "$repo" \
+              --target-repo "$repo" \
+              --github-source-pat "$GH_SOURCE_PAT" \
+              --github-target-pat "$GH_TARGET_PAT"; then
+              echo "ERROR: Migration failed for $repo — skipping post-scan"
+              FAILED_REPOS="$FAILED_REPOS $repo(migration-failed)"
+              continue
+            fi
 
-           git clone https://x-access-token:$GH_SOURCE_PAT@github.com/ambika-org2/$repo.git source-$repo
+            echo "Migration complete for $repo"
 
-           cd source-$repo
+            ##################################################
+            # STEP 3: CLONE TARGET + POST-MIGRATION SONAR SCAN
+            ##################################################
+            echo "--- [POST-MIGRATION] Cloning $repo from target org ---"
+            if ! git clone https://x-access-token:$GH_TARGET_PAT@github.com/aberlia-org/$repo.git "target-$repo"; then
+              echo "ERROR: Target clone failed for $repo"
+              FAILED_REPOS="$FAILED_REPOS $repo(target-clone-failed)"
+              continue
+            fi
 
-           ##################################################
-           # SONAR SCAN BEFORE MIGRATION
-           ##################################################
+            echo "--- [POST-MIGRATION] Sonar scan on $repo ---"
+            if ! sonar-scanner \
+              -Dsonar.projectKey="${repo}-target" \
+              -Dsonar.organization=aberlia-org \
+              -Dsonar.sources="target-$repo" \
+              -Dsonar.host.url="$SONAR_HOST_URL" \
+              -Dsonar.login="$SONAR_TOKEN"; then
+              echo "ERROR: Post-migration Sonar scan failed for $repo"
+              FAILED_REPOS="$FAILED_REPOS $repo(post-scan-failed)"
+            else
+              echo "Post-migration scan complete for $repo"
+            fi
 
-           sonar-scanner \
-             -Dsonar.projectKey=${repo}-source \
-             -Dsonar.organization=aberlia-org \
-             -Dsonar.sources=. \
-             -Dsonar.host.url=$SONAR_HOST_URL \
-             -Dsonar.login=$SONAR_TOKEN
+            rm -rf "target-$repo"
 
-           cd ..
+          done < repos.txt
 
-           rm -rf source-$repo
+          ##################################################
+          # FINAL SUMMARY
+          ##################################################
+          if [ -n "$FAILED_REPOS" ]; then
+            echo "=========================================="
+            echo "Repos with issues: $FAILED_REPOS"
+            echo "=========================================="
+            exit 1
+          fi
 
-           ##################################################
-           # MIGRATION
-           ##################################################
-
-           gh gei migrate-repo \
-             --github-source-org ambika-org2 \
-             --github-target-org aberlia-org \
-             --source-repo $repo \
-             --target-repo $repo \
-             --github-source-pat $GH_SOURCE_PAT \
-             --github-target-pat $GH_TARGET_PAT || true
-
-           ##################################################
-           # CLONE TARGET REPO
-           ##################################################
-
-           git clone https://x-access-token:$GH_TARGET_PAT@github.com/aberlia-org/$repo.git target-$repo
-
-           cd target-$repo
-
-           ##################################################
-           # SONAR SCAN AFTER MIGRATION
-           ##################################################
-
-           sonar-scanner \
-             -Dsonar.projectKey=${repo}-target \
-             -Dsonar.organization=aberlia-org \
-             -Dsonar.sources=. \
-             -Dsonar.host.url=$SONAR_HOST_URL \
-             -Dsonar.login=$SONAR_TOKEN
-
-           cd ..
-
-           rm -rf target-$repo
-
-         done < repos.txt
-
+          echo "All repos processed successfully!"
