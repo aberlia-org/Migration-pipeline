@@ -1,4 +1,4 @@
-name: Migration + Sonar + Gitleaks Analysis + Notiication
+name: Migration + Sonar + Gitleaks Analysis
 on:
   workflow_dispatch:
 
@@ -45,9 +45,11 @@ jobs:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
         run: |
           mkdir -p sarif-reports
+          touch /tmp/failed_repos.txt
           SECRETS_FOUND=0
 
           while read repo; do
+            [ -z "$repo" ] && continue
             echo "=============================="
             echo "Processing $repo..."
             echo "=============================="
@@ -65,7 +67,7 @@ jobs:
             git clone https://x-access-token:$GH_TARGET_PAT@github.com/aberlia-org/$repo.git
             cd "$repo"
 
-            # Gitleaks scan
+            # Gitleaks scan — full history all branches
             echo "--- Running Gitleaks on $repo ---"
             gitleaks detect \
               --source . \
@@ -102,26 +104,24 @@ jobs:
 
           done < repos.txt
 
+          # Write env var BEFORE step ends — no exit 1 here
           if [ $SECRETS_FOUND -eq 1 ]; then
             echo "SECRETS_FOUND=true" >> $GITHUB_ENV
+            echo "=========================================="
+            echo "MIGRATION BLOCKED — secrets found in:"
+            cat /tmp/failed_repos.txt
+            echo "=========================================="
           else
             echo "SECRETS_FOUND=false" >> $GITHUB_ENV
+            echo "All repos passed Gitleaks scan."
           fi
 
-          if [ $SECRETS_FOUND -eq 1 ]; then
-            echo "=========================================="
-            echo "MIGRATION BLOCKED — secrets found"
-            echo "=========================================="
-            exit 1
-          fi
-
-      # ── Notify repo owner via GitHub issue (no email needed) ────────
+      # ── Create GitHub issue and notify repo owner ───────────────────
       - name: Create issue and notify repo owner
         if: always() && env.SECRETS_FOUND == 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
         run: |
-          # Create failed_repos.txt if it doesn't exist
           touch /tmp/failed_repos.txt
 
           while read repo; do
@@ -130,19 +130,33 @@ jobs:
             echo "Notifying owner of $repo..."
             echo "=============================="
 
-            # Clone shallow copy just to read git history
+            # Enable issues on repo in case disabled after migration
+            curl -s -X PATCH \
+              -H "Authorization: token $GH_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/aberlia-org/$repo" \
+              -d '{"has_issues": true}'
+            echo "Issues enabled for $repo"
+
+            # Create security label if it doesn't exist
+            gh label create "security" \
+              --repo "aberlia-org/$repo" \
+              --color "FF0000" \
+              --description "Security vulnerability" 2>/dev/null || true
+
+            # Clone shallow to read git history
             git clone --depth=50 \
               https://x-access-token:$GH_TOKEN@github.com/aberlia-org/$repo.git \
               temp-$repo
             cd temp-$repo
 
-            # Extract contributor emails, filter out GitHub bots
+            # Extract contributor emails — filter bots
             COMMITTER_EMAILS=$(git log --format='%ae' \
               | sort -u \
               | grep -v 'noreply' \
               | head -5)
 
-            # Resolve each email to a GitHub username
+            # Resolve emails to GitHub usernames
             GITHUB_MENTIONS=""
             ASSIGNEES=""
             for email in $COMMITTER_EMAILS; do
@@ -150,11 +164,11 @@ jobs:
                 -H "Authorization: token $GH_TOKEN" \
                 "https://api.github.com/search/users?q=$email+in:email" \
                 | python3 -c "
-            import json,sys
-            data=json.load(sys.stdin)
-            items=data.get('items',[])
-            print(items[0]['login'] if items else '')
-            " 2>/dev/null)
+          import json,sys
+          data=json.load(sys.stdin)
+          items=data.get('items',[])
+          print(items[0]['login'] if items else '')
+          " 2>/dev/null)
 
               if [ -n "$USERNAME" ]; then
                 GITHUB_MENTIONS="$GITHUB_MENTIONS @$USERNAME"
@@ -163,7 +177,7 @@ jobs:
                 else
                   ASSIGNEES="$ASSIGNEES,\"$USERNAME\""
                 fi
-                echo "Resolved $email → @$USERNAME"
+                echo "Resolved $email -> @$USERNAME"
               else
                 echo "Could not resolve GitHub username for $email"
               fi
@@ -176,15 +190,15 @@ jobs:
             FINDINGS="No JSON report found."
             if [ -f "sarif-reports/$repo.json" ]; then
               FINDINGS=$(python3 -c "
-            import json, sys
-            with open('sarif-reports/$repo.json') as f:
-                data = json.load(f)
-            if not data:
-                print('No findings parsed.')
-            else:
-                for item in data:
-                    print(f'- **{item[\"RuleID\"]}** in \`{item[\"File\"]}\` line {item[\"Line\"]} — by {item[\"Author\"]} on {item[\"Date\"][:10]}')
-            " 2>/dev/null || echo "Could not parse findings — check pipeline logs.")
+          import json, sys
+          with open('sarif-reports/$repo.json') as f:
+              data = json.load(f)
+          if not data:
+              print('No findings parsed.')
+          else:
+              for item in data:
+                  print(f'- **{item[\"RuleID\"]}** in \`{item[\"File\"]}\` line {item[\"Line\"]} — by {item[\"Author\"]} on {item[\"Date\"][:10]}')
+          " 2>/dev/null || echo "Could not parse findings — check pipeline logs.")
             fi
 
             # Create GitHub issue
@@ -194,39 +208,38 @@ jobs:
               --label "security" \
               --body "## Secret scan failed for \`$repo\`
 
-            Gitleaks detected hardcoded secrets in this repository's git history.
-            **Migration to Opella has been blocked** until these are resolved.
+          Gitleaks detected hardcoded secrets in this repository's git history.
+          **Migration to Opella has been blocked** until these are resolved.
 
-            cc $GITHUB_MENTIONS — please action this.
+          cc $GITHUB_MENTIONS — please action this.
 
-            ---
+          ---
 
-            ## Findings
+          ## Findings
 
-            $FINDINGS
+          $FINDINGS
 
-            ---
+          ---
 
-            ## What to do
+          ## What to do
 
-            1. **Rotate** all leaked credentials immediately at their provider (AWS, Vault, etc.)
-            2. **Remove** secrets from git history:
-               \`\`\`bash
-               # Using BFG Repo Cleaner
-               bfg --delete-files <filename>
-               git reflog expire --expire=now --all
-               git gc --prune=now --aggressive
-               git push --force
-               \`\`\`
-            3. **Add** a \`.gitleaks.toml\` allowlist entry if any finding is a false positive
-            4. **Re-run** the migration pipeline once resolved
+          1. **Rotate** all leaked credentials immediately at their provider (AWS, Vault, etc.)
+          2. **Remove** secrets from git history:
+             \`\`\`bash
+             bfg --delete-files <filename>
+             git reflog expire --expire=now --all
+             git gc --prune=now --aggressive
+             git push --force
+             \`\`\`
+          3. **Add** a \`.gitleaks.toml\` allowlist entry if any finding is a false positive
+          4. **Re-run** the migration pipeline once resolved
 
-            ---
+          ---
 
-            ## Pipeline run
-            [View full scan logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          ## Pipeline run
+          [View full scan logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
-            > This issue was automatically created by the Sanofi → Opella migration pipeline.")
+          > This issue was automatically created by the Sanofi → Opella migration pipeline.")
 
             echo "Issue created: $ISSUE_URL"
 
@@ -246,10 +259,10 @@ jobs:
               -H "Authorization: token $GH_TOKEN" \
               "https://api.github.com/repos/aberlia-org/$repo/pulls?state=open" \
               | python3 -c "
-            import json,sys
-            prs=json.load(sys.stdin)
-            for pr in prs: print(pr['number'])
-            " 2>/dev/null)
+          import json,sys
+          prs=json.load(sys.stdin)
+          for pr in prs: print(pr['number'])
+          " 2>/dev/null)
 
             for pr_number in $OPEN_PRS; do
               curl -s -X POST \
@@ -279,7 +292,7 @@ jobs:
           path: sarif-reports/
           retention-days: 30
 
-      # ── Post summary ──────────────────────────────────────────────────
+      # ── Post summary ─────────────────────────────────────────────────
       - name: Post scan summary
         if: always()
         run: |
@@ -290,9 +303,4 @@ jobs:
               echo "- $(basename $f .sarif)" >> $GITHUB_STEP_SUMMARY
             done
           fi
-          if [ -f /tmp/failed_repos.txt ] && [ -s /tmp/failed_repos.txt ]; then
-            echo "### Blocked repos (secrets found):" >> $GITHUB_STEP_SUMMARY
-            while read repo; do
-              echo "- $repo" >> $GITHUB_STEP_SUMMARY
-            done < /tmp/failed_repos.txt
-          fi
+          i
