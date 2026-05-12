@@ -1,7 +1,7 @@
 name: Migration + Sonar AnalysisP
 
 on:
-  workflow_dispatch:  # 2-space indent — only manual trigger
+  workflow_dispatch:  # only manual trigger
 
 jobs:
   migrate-and-scan:
@@ -40,9 +40,9 @@ jobs:
             echo "Processing repo: $repo"
             echo "====================================="
 
-            ##################################################
-            # STEP 1: CLONE SOURCE + PRE-MIGRATION SONAR SCAN
-            ##################################################
+           
+            # CLONE SOURCE + PRE-MIGRATION SONAR SCAN
+            
             echo "--- [PRE-MIGRATION] Cloning $repo from source org ---"
             if ! git clone https://x-access-token:$GH_SOURCE_PAT@github.com/ambika-org2/$repo.git "source-$repo"; then
               echo "ERROR: Source clone failed for $repo — skipping"
@@ -66,9 +66,9 @@ jobs:
             rm -rf "source-$repo"
             echo "Pre-migration scan complete for $repo"
 
-            ##################################################
-            # STEP 2: MIGRATE REPO
-            ##################################################
+            
+            # MIGRATE REPO
+            
             echo "--- Migrating $repo ---"
             if ! gh gei migrate-repo \
               --github-source-org ambika-org2 \
@@ -84,9 +84,9 @@ jobs:
 
             echo "Migration complete for $repo"
 
-            ##################################################
-            # STEP 3: CLONE TARGET + POST-MIGRATION SONAR SCAN
-            ##################################################
+        
+            # CLONE TARGET + POST-MIGRATION SONAR SCAN
+           
             echo "--- [POST-MIGRATION] Cloning $repo from target org ---"
             if ! git clone https://x-access-token:$GH_TARGET_PAT@github.com/aberlia-org/$repo.git "target-$repo"; then
               echo "ERROR: Target clone failed for $repo"
