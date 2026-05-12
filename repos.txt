@@ -1,2 +1,3 @@
+Gitleaks_test_repo
 hashicorp
 terraform-zero-to-hero
