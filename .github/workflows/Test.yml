@@ -81,7 +81,7 @@ jobs:
             gitleaks detect \
               --source . \
               --report-path ../${repo}-gitleaks-report.json \
-              --verbose || true
+              --verbose
 
             cd ..
             rm -rf source-$repo
