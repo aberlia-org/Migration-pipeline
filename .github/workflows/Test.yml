@@ -14,6 +14,9 @@ jobs:
       - name: Checkout pipeline repo
         uses: actions/checkout@v3
 
+        with:
+          lfs: true
+
       
       # INSTALL GEI
      
