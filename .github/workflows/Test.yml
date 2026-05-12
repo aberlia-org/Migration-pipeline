@@ -1,4 +1,4 @@
-name: Migration + Sonar + Gitleaks Analysis
+name: Migration + Sonar + Gitleaks AnalysisMain
 
 on:
   workflow_dispatch:
