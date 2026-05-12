@@ -1,2 +1,2 @@
-Gitleaks_test_repo
+hashicorp
 
