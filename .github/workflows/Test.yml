@@ -111,9 +111,9 @@ jobs:
 
           done < repos.txt
 
-          ##################################################
+          
           # FINAL SUMMARY
-          ##################################################
+         
           if [ -n "$FAILED_REPOS" ]; then
             echo "=========================================="
             echo "Repos with issues: $FAILED_REPOS"
