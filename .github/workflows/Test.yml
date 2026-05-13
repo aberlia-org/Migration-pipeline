@@ -1,34 +1,28 @@
 name: Migration + Sonar + Gitleaks AnalysisMain
-
 on:
   workflow_dispatch:
-
 jobs:
   migrate-and-scan:
     runs-on: ubuntu-latest
     steps:
 
-      
       # CHECKOUT PIPELINE REPO
-      
+
       - name: Checkout pipeline repo
         uses: actions/checkout@v3
-
         with:
           lfs: true
 
-      
       # INSTALL GEI
-     
+
       - name: Install GHE extension
         env:
           GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
         run: |
           gh extension install github/gh-gei
 
-      
       # INSTALL SONAR SCANNER
-      
+
       - name: Install Sonar Scanner
         run: |
           curl -sSLo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
@@ -36,9 +30,8 @@ jobs:
           mv sonar-scanner-* sonar-scanner
           echo "$PWD/sonar-scanner/bin" >> $GITHUB_PATH
 
-    
       # INSTALL GITLEAKS
-      
+
       - name: Install Gitleaks
         run: |
           wget https://github.com/gitleaks/gitleaks/releases/download/v8.18.2/gitleaks_8.18.2_linux_x64.tar.gz
@@ -46,9 +39,8 @@ jobs:
           chmod +x gitleaks
           sudo mv gitleaks /usr/local/bin/
 
-      
       # MAIN PROCESS
-      
+
       - name: Migrate and Scan Repos
         env:
           GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
@@ -62,15 +54,13 @@ jobs:
             echo "Processing repo: $repo"
             echo "====================================="
 
-            
             # CLONE SOURCE REPO
-            
+
             git clone https://x-access-token:$GH_SOURCE_PAT@github.com/ambika-org2/$repo.git source-$repo
             cd source-$repo
 
-            
             # SONAR SCAN - SOURCE
-            
+
             sonar-scanner \
               -Dsonar.projectKey=${repo}-source \
               -Dsonar.organization=aberlia-org \
@@ -78,20 +68,17 @@ jobs:
               -Dsonar.host.url=$SONAR_HOST_URL \
               -Dsonar.login=$SONAR_TOKEN
 
-            
             # GITLEAKS SCAN - SOURCE
-            
+
             gitleaks detect \
               --source . \
               --report-path ../${repo}-gitleaks-report.json \
               --verbose
-
             cd ..
             rm -rf source-$repo
 
-      
             # MIGRATION
-            
+
             gh gei migrate-repo \
               --github-source-org ambika-org2 \
               --github-target-org aberlia-org \
@@ -100,23 +87,31 @@ jobs:
               --github-source-pat $GH_SOURCE_PAT \
               --github-target-pat $GH_TARGET_PAT || true
 
-            
             # CLONE TARGET REPO
-            
+
             git clone https://x-access-token:$GH_TARGET_PAT@github.com/aberlia-org/$repo.git target-$repo
             cd target-$repo
 
-          
             # SONAR SCAN - TARGET
-            
+
             sonar-scanner \
               -Dsonar.projectKey=${repo}-target \
               -Dsonar.organization=aberlia-org \
               -Dsonar.sources=. \
               -Dsonar.host.url=$SONAR_HOST_URL \
               -Dsonar.login=$SONAR_TOKEN
-
             cd ..
             rm -rf target-$repo
-
           done < repos.txt
+
+      # UPLOAD GITLEAKS REPORTS
+
+      - name: Upload Gitleaks Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-reports
+          path: "*.json"
+
+
+
