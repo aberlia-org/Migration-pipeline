@@ -20,6 +20,45 @@ SEARCH_PATTERNS = [
     "aws-access-key-id"
 ]
 
+# Mapping AWS patterns to Azure replacements
+REMEDIATION_MAP = {
+    "aws-actions/configure-aws-credentials": {
+        "replacement": "azure/login",
+        "complexity": "Low",
+        "action": "Auto Migration Possible"
+    },
+    "AWS_ROLE_ARN": {
+        "replacement": "Azure Federated Identity",
+        "complexity": "Medium",
+        "action": "Identity Migration Required"
+    },
+    "secretsmanager": {
+        "replacement": "Azure Key Vault",
+        "complexity": "Medium",
+        "action": "Secret Migration Required"
+    },
+    "aws_secret_access_key": {
+        "replacement": "Azure Key Vault Secret",
+        "complexity": "High",
+        "action": "Manual Review Needed"
+    },
+    "secretmanager_secret_version": {
+        "replacement": "Azure Key Vault Versioning",
+        "complexity": "High",
+        "action": "Manual Remediation Needed"
+    },
+    "kms": {
+        "replacement": "Azure Key Vault Encryption",
+        "complexity": "Medium",
+        "action": "Encryption Migration Required"
+    },
+    "aws-access-key-id": {
+        "replacement": "Azure Service Principal",
+        "complexity": "Medium",
+        "action": "Credential Migration Required"
+    }
+}
+
 repos_url = f"https://api.github.com/orgs/{ORG_NAME}/repos"
 response = requests.get(repos_url, headers=HEADERS)
 repos = response.json()
@@ -52,14 +91,40 @@ for repo in repos:
 
     findings = list(set(findings))
 
+    recommendations = []
+    complexities = []
+    actions = []
+
+    for finding in findings:
+        if finding in REMEDIATION_MAP:
+            recommendations.append(
+                REMEDIATION_MAP[finding]["replacement"]
+            )
+            complexities.append(
+                REMEDIATION_MAP[finding]["complexity"]
+            )
+            actions.append(
+                REMEDIATION_MAP[finding]["action"]
+            )
+
     results.append({
         "Repository": repo_name,
         "AWS_Usage_Found": "YES" if findings else "NO",
-        "Patterns": ", ".join(findings)
+        "Patterns": ", ".join(findings),
+        "Azure_Replacement": ", ".join(set(recommendations)),
+        "Complexity": ", ".join(set(complexities)),
+        "Suggested_Action": ", ".join(set(actions))
     })
 
 with open('scan-report.csv', 'w', newline='') as csvfile:
-    fieldnames = ['Repository', 'AWS_Usage_Found', 'Patterns']
+    fieldnames = [
+        'Repository',
+        'AWS_Usage_Found',
+        'Patterns',
+        'Azure_Replacement',
+        'Complexity',
+        'Suggested_Action'
+    ]
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
     writer.writerows(results)
