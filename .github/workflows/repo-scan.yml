@@ -2,7 +2,9 @@ name: Repository Secret Discovery Scan
 
 on:
  workflow_dispatch:
-
+ push: 
+   branches:
+     -main 
 jobs:
  scan-repositories:
    runs-on: ubuntu-latest
