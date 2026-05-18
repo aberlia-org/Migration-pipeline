@@ -10,24 +10,29 @@ jobs:
   scan-repositories:
     runs-on: ubuntu-latest
     steps:
+      # CHECKOUT PIPELINE REPO
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # SETUP PYTHON
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
+      # INSTALL DEPENDENCIES
       - name: Install Dependencies
         run: |
-          pip install requests
+          pip install requests pandas openpyxl
 
+      # RUN SOURCE REPO SCANNER
       - name: Run Repository Scanner
         env:
           GH_TOKEN: ${{ secrets.GH_SOURCE_PAT }}
         run: |
-          python ./.github/workflows/scan.repo.py
+          python .github/workflows/scan.repo.py
 
+      # UPLOAD REPORT
       - name: Upload Report
         uses: actions/upload-artifact@v4
         with:
