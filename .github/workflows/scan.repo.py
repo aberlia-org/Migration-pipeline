@@ -3,13 +3,13 @@ import requests
 import csv
 import subprocess
 
-# =========================
+# ==========================================
 # CONFIGURATION
-# =========================
+# ==========================================
 
 GITHUB_TOKEN = os.getenv("GH_TOKEN")
 
-# SOURCE ORG TO SCAN
+# SOURCE ORGANIZATION
 ORG_NAME = "ambika-org2"
 
 HEADERS = {
@@ -17,7 +17,20 @@ HEADERS = {
     "Accept": "application/vnd.github.v3+json"
 }
 
-# AWS PATTERNS TO SEARCH
+# VALID FILE TYPES TO SCAN
+VALID_EXTENSIONS = [
+    ".yml",
+    ".yaml",
+    ".tf",
+    ".sh",
+    ".py",
+    ".json",
+    ".txt",
+    ".md",
+    ".properties"
+]
+
+# AWS PATTERNS + AZURE REPLACEMENTS
 SEARCH_PATTERNS = {
     "aws-actions/configure-aws-credentials": {
         "azure_replacement": "azure/login",
@@ -74,9 +87,9 @@ SEARCH_PATTERNS = {
     }
 }
 
-# =========================
+# ==========================================
 # GET REPOSITORIES
-# =========================
+# ==========================================
 
 repos_url = f"https://api.github.com/orgs/{ORG_NAME}/repos"
 
@@ -86,9 +99,12 @@ repos = response.json()
 
 results = []
 
-# =========================
-# SCAN EACH REPOSITORY
-# =========================
+# CREATE TEMP DIRECTORY
+os.makedirs("./temp", exist_ok=True)
+
+# ==========================================
+# SCAN REPOSITORIES
+# ==========================================
 
 for repo in repos:
 
@@ -96,14 +112,12 @@ for repo in repos:
 
     print(f"\nScanning repository: {repo_name}")
 
-    clone_url = repo["clone_url"]
-
     local_path = f"./temp/{repo_name}"
 
-    # CLEAN OLD COPY
+    # DELETE OLD LOCAL COPY
     subprocess.run(["rm", "-rf", local_path])
 
-    # CLONE REPOSITORY
+    # CLONE SOURCE REPOSITORY
     clone_command = [
         "git",
         "clone",
@@ -111,60 +125,11 @@ for repo in repos:
         local_path
     ]
 
-    clone_result = subprocess.run(clone_command)
+    clone_result = subprocess.run(
+        clone_command,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
 
     if clone_result.returncode != 0:
-        print(f"Failed to clone {repo_name}")
-        continue
-
-    # SCAN FILES
-    for root, dirs, files in os.walk(local_path):
-
-        for file in files:
-
-            file_path = os.path.join(root, file)
-
-            try:
-                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-
-                    content = f.read().lower()
-
-                    for pattern, details in SEARCH_PATTERNS.items():
-
-                        if pattern.lower() in content:
-
-                            results.append({
-                                "Repository": repo_name,
-                                "File": file_path.replace(local_path, ""),
-                                "AWS_Usage": pattern,
-                                "Azure_Replacement": details["azure_replacement"],
-                                "Complexity": details["complexity"],
-                                "Suggested_Action": details["suggested_action"]
-                            })
-
-            except Exception as e:
-                print(f"Could not read file: {file_path}")
-
-# =========================
-# GENERATE CSV REPORT
-# =========================
-
-with open("scan-report.csv", "w", newline="", encoding="utf-8") as csvfile:
-
-    fieldnames = [
-        "Repository",
-        "File",
-        "AWS_Usage",
-        "Azure_Replacement",
-        "Complexity",
-        "Suggested_Action"
-    ]
-
-    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
-    writer.writeheader()
-
-    writer.writerows(results)
-
-print("\nScan completed successfully.")
-print("Report generated: scan-report.csv")
+        prin
