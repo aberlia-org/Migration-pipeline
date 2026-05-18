@@ -1,36 +1,35 @@
 name: Repository Secret Discovery Scan
 
 on:
- workflow_dispatch:
- push: 
-   branches:
-     -main 
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
 jobs:
- scan-repositories:
-   runs-on: ubuntu-latest
+  scan-repositories:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-   steps:
-     - name: Checkout Repository
-       uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-     - name: Setup Python
-       uses: actions/setup-python@v5
-       with:
-         python-version: '3.11'
+      - name: Install Dependencies
+        run: |
+          pip install requests
 
-     - name: Install Dependencies
-       run: |
-         pip install requests
+      - name: Run Repository Scanner
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          python scan_repos.py
 
-     - name: Run Repository Scanner
-       env:
-         GH_TOKEN: ${{ secrets.GH_TOKEN }}
-       run: |
-         python scan_repos.py
-
-     - name: Upload Report
-       uses: actions/upload-artifact@v4
-       with:
-         name: repo-scan-report
-         path: scan-report.csv
-
+      - name: Upload Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: repo-scan-report
+          path: scan-report.csv
