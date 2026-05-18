@@ -1,132 +1,170 @@
 import os
 import requests
 import csv
+import subprocess
+
+# =========================
+# CONFIGURATION
+# =========================
 
 GITHUB_TOKEN = os.getenv("GH_TOKEN")
-ORG_NAME = "aberlia-org"
+
+# SOURCE ORG TO SCAN
+ORG_NAME = "ambika-org2"
 
 HEADERS = {
     "Authorization": f"token {GITHUB_TOKEN}",
     "Accept": "application/vnd.github.v3+json"
 }
 
-SEARCH_PATTERNS = [
-    "aws-actions/configure-aws-credentials",
-    "AWS_ROLE_ARN",
-    "secretsmanager",
-    "aws_secret_access_key",
-    "secretmanager_secret_version",
-    "kms",
-    "aws-access-key-id"
-]
-
-# Mapping AWS patterns to Azure replacements
-REMEDIATION_MAP = {
+# AWS PATTERNS TO SEARCH
+SEARCH_PATTERNS = {
     "aws-actions/configure-aws-credentials": {
-        "replacement": "azure/login",
+        "azure_replacement": "azure/login",
         "complexity": "Low",
-        "action": "Auto Migration Possible"
+        "suggested_action": "Auto migration possible"
     },
+
     "AWS_ROLE_ARN": {
-        "replacement": "Azure Federated Identity",
+        "azure_replacement": "Azure Managed Identity",
         "complexity": "Medium",
-        "action": "Identity Migration Required"
+        "suggested_action": "Identity remediation required"
     },
-    "secretsmanager": {
-        "replacement": "Azure Key Vault",
-        "complexity": "Medium",
-        "action": "Secret Migration Required"
-    },
+
     "aws_secret_access_key": {
-        "replacement": "Azure Key Vault Secret",
+        "azure_replacement": "Azure Key Vault Secret",
         "complexity": "High",
-        "action": "Manual Review Needed"
+        "suggested_action": "Manual secret remediation required"
     },
-    "secretmanager_secret_version": {
-        "replacement": "Azure Key Vault Versioning",
-        "complexity": "High",
-        "action": "Manual Remediation Needed"
-    },
-    "kms": {
-        "replacement": "Azure Key Vault Encryption",
-        "complexity": "Medium",
-        "action": "Encryption Migration Required"
-    },
+
     "aws-access-key-id": {
-        "replacement": "Azure Service Principal",
+        "azure_replacement": "Azure Service Principal",
         "complexity": "Medium",
-        "action": "Credential Migration Required"
+        "suggested_action": "Credential replacement required"
+    },
+
+    "secretmanager": {
+        "azure_replacement": "Azure Key Vault",
+        "complexity": "Medium",
+        "suggested_action": "Secret migration required"
+    },
+
+    "secretsmanager_secret_version": {
+        "azure_replacement": "Azure Key Vault Versioning",
+        "complexity": "Medium",
+        "suggested_action": "Versioning remediation required"
+    },
+
+    "kms": {
+        "azure_replacement": "Azure Key Vault Encryption",
+        "complexity": "Medium",
+        "suggested_action": "Encryption remediation required"
+    },
+
+    "boto3": {
+        "azure_replacement": "Azure SDK",
+        "complexity": "High",
+        "suggested_action": "Code remediation required"
+    },
+
+    "aws secretsmanager": {
+        "azure_replacement": "az keyvault",
+        "complexity": "High",
+        "suggested_action": "CLI remediation required"
     }
 }
 
+# =========================
+# GET REPOSITORIES
+# =========================
+
 repos_url = f"https://api.github.com/orgs/{ORG_NAME}/repos"
+
 response = requests.get(repos_url, headers=HEADERS)
+
 repos = response.json()
 
 results = []
 
+# =========================
+# SCAN EACH REPOSITORY
+# =========================
+
 for repo in repos:
-    repo_name = repo['name']
-    print(f"Scanning repo: {repo_name}")
 
-    contents_url = f"https://api.github.com/repos/{ORG_NAME}/{repo_name}/contents/.github/workflows"
-    contents_response = requests.get(contents_url, headers=HEADERS)
+    repo_name = repo["name"]
 
-    if contents_response.status_code != 200:
+    print(f"\nScanning repository: {repo_name}")
+
+    clone_url = repo["clone_url"]
+
+    local_path = f"./temp/{repo_name}"
+
+    # CLEAN OLD COPY
+    subprocess.run(["rm", "-rf", local_path])
+
+    # CLONE REPOSITORY
+    clone_command = [
+        "git",
+        "clone",
+        f"https://x-access-token:{GITHUB_TOKEN}@github.com/{ORG_NAME}/{repo_name}.git",
+        local_path
+    ]
+
+    clone_result = subprocess.run(clone_command)
+
+    if clone_result.returncode != 0:
+        print(f"Failed to clone {repo_name}")
         continue
 
-    workflow_files = contents_response.json()
-    findings = []
+    # SCAN FILES
+    for root, dirs, files in os.walk(local_path):
 
-    for wf in workflow_files:
-        download_url = wf.get('download_url')
-        if not download_url:
-            continue
+        for file in files:
 
-        file_content = requests.get(download_url).text
+            file_path = os.path.join(root, file)
 
-        for pattern in SEARCH_PATTERNS:
-            if pattern.lower() in file_content.lower():
-                findings.append(pattern)
+            try:
+                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
 
-    findings = list(set(findings))
+                    content = f.read().lower()
 
-    recommendations = []
-    complexities = []
-    actions = []
+                    for pattern, details in SEARCH_PATTERNS.items():
 
-    for finding in findings:
-        if finding in REMEDIATION_MAP:
-            recommendations.append(
-                REMEDIATION_MAP[finding]["replacement"]
-            )
-            complexities.append(
-                REMEDIATION_MAP[finding]["complexity"]
-            )
-            actions.append(
-                REMEDIATION_MAP[finding]["action"]
-            )
+                        if pattern.lower() in content:
 
-    results.append({
-        "Repository": repo_name,
-        "AWS_Usage_Found": "YES" if findings else "NO",
-        "Patterns": ", ".join(findings),
-        "Azure_Replacement": ", ".join(set(recommendations)),
-        "Complexity": ", ".join(set(complexities)),
-        "Suggested_Action": ", ".join(set(actions))
-    })
+                            results.append({
+                                "Repository": repo_name,
+                                "File": file_path.replace(local_path, ""),
+                                "AWS_Usage": pattern,
+                                "Azure_Replacement": details["azure_replacement"],
+                                "Complexity": details["complexity"],
+                                "Suggested_Action": details["suggested_action"]
+                            })
 
-with open('scan-report.csv', 'w', newline='') as csvfile:
+            except Exception as e:
+                print(f"Could not read file: {file_path}")
+
+# =========================
+# GENERATE CSV REPORT
+# =========================
+
+with open("scan-report.csv", "w", newline="", encoding="utf-8") as csvfile:
+
     fieldnames = [
-        'Repository',
-        'AWS_Usage_Found',
-        'Patterns',
-        'Azure_Replacement',
-        'Complexity',
-        'Suggested_Action'
+        "Repository",
+        "File",
+        "AWS_Usage",
+        "Azure_Replacement",
+        "Complexity",
+        "Suggested_Action"
     ]
+
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
     writer.writeheader()
+
     writer.writerows(results)
 
+print("\nScan completed successfully.")
 print("Report generated: scan-report.csv")
