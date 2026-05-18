@@ -132,4 +132,101 @@ for repo in repos:
     )
 
     if clone_result.returncode != 0:
-        prin
+        print(f"Failed to clone {repo_name}")
+        continue
+
+    # ==========================================
+    # WALK THROUGH ALL FILES
+    # ==========================================
+
+    for root, dirs, files in os.walk(local_path):
+
+        for file in files:
+
+            # SKIP NON-RELEVANT FILES
+            if not file.endswith(tuple(VALID_EXTENSIONS)):
+                continue
+
+            file_path = os.path.join(root, file)
+
+            try:
+
+                with open(
+                    file_path,
+                    "r",
+                    encoding="utf-8",
+                    errors="ignore"
+                ) as f:
+
+                    lines = f.readlines()
+
+                    # CHECK EACH LINE
+                    for line_number, line in enumerate(lines, start=1):
+
+                        line_lower = line.lower()
+
+                        for pattern, details in SEARCH_PATTERNS.items():
+
+                            if pattern.lower() in line_lower:
+
+                                results.append({
+                                    "Repository": repo_name,
+                                    "File": file_path.replace(local_path, ""),
+                                    "Line_Number": line_number,
+                                    "AWS_Usage": pattern,
+                                    "Matched_Line": line.strip(),
+                                    "Azure_Replacement": details["azure_replacement"],
+                                    "Complexity": details["complexity"],
+                                    "Suggested_Action": details["suggested_action"]
+                                })
+
+            except Exception as e:
+                print(f"Could not read file: {file_path}")
+
+# ==========================================
+# GENERATE CSV REPORT
+# ==========================================
+
+with open(
+    "scan-report.csv",
+    "w",
+    newline="",
+    encoding="utf-8"
+) as csvfile:
+
+    fieldnames = [
+        "Repository",
+        "File",
+        "Line_Number",
+        "AWS_Usage",
+        "Matched_Line",
+        "Azure_Replacement",
+        "Complexity",
+        "Suggested_Action"
+    ]
+
+    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+    writer.writeheader()
+
+    # WRITE RESULTS
+    if results:
+        writer.writerows(results)
+
+    # IF NOTHING FOUND
+    else:
+        writer.writerow({
+            "Repository": "No AWS usage detected",
+            "File": "",
+            "Line_Number": "",
+            "AWS_Usage": "",
+            "Matched_Line": "",
+            "Azure_Replacement": "",
+            "Complexity": "",
+            "Suggested_Action": ""
+        })
+
+print("\n===================================")
+print("Scan completed successfully.")
+print("Report generated: scan-report.csv")
+print("===================================")
