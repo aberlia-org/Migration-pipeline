@@ -24,7 +24,7 @@ jobs:
 
       - name: Run Repository Scanner
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN_PAT }}
+          GH_TOKEN: ${{ secrets.GH_SOURCE_PAT }}
         run: |
           python ./.github/workflows/scan.repo.py
 
