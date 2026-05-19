@@ -117,9 +117,30 @@ AUTO_REPLACEMENTS = {
         "az keyvault secret"
 }
 
+# ==========================================
+
+# GET REPOSITORIES
+
+# ==========================================
+
+repos_url = f"https://api.github.com/orgs/{ORG_NAME}/repos"
+
+response = requests.get(
+
+    repos_url,
+
+    headers=HEADERS
+
+)
+
+repos = response.json()
+
 results = []
+
 os.makedirs("./temp", exist_ok=True)
+
 os.makedirs("./remediated", exist_ok=True)
+ 
 # ==========================================
 # SCAN REPOSITORIES
 # ==========================================
