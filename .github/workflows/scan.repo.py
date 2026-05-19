@@ -99,25 +99,6 @@ SEARCH_PATTERNS = {
 }
 
 # ==========================================
-# AUTO REPLACEMENTS
-# ==========================================
-
-AUTO_REPLACEMENTS = {
-
-    "aws-actions/configure-aws-credentials":
-        "azure/login",
-
-    "secretmanager":
-        "keyvault",
-
-    "kms":
-        "Azure Key Vault",
-
-    "aws secretsmanager":
-        "az keyvault secret"
-}
-
-# ==========================================
 # GET REPOSITORIES
 # ==========================================
 
@@ -130,7 +111,6 @@ repos = response.json()
 results = []
 
 os.makedirs("./temp", exist_ok=True)
-os.makedirs("./remediated", exist_ok=True)
 
 # ==========================================
 # SCAN REPOSITORIES
