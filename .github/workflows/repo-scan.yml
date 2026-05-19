@@ -38,3 +38,10 @@ jobs:
         with:
           name: repo-scan-report
           path: scan-report.csv
+
+      # UPLOAD REMEDIATED FILES
+      - name: Upload Remediated Files
+        uses: actions/upload-artifact@v4
+        with:
+          name: remediated-output
+          path: remediated/
