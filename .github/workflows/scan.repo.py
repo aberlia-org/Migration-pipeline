@@ -98,19 +98,23 @@ SEARCH_PATTERNS = {
     }
 }
 
+# ==========================================
+# AUTO REPLACEMENTS
+# ==========================================
+
 AUTO_REPLACEMENTS = {
 
-   "aws-actions/configure-aws-credentials":
-       "azure/login",
+    "aws-actions/configure-aws-credentials":
+        "azure/login",
 
-   "secretmanager":
-       "keyvault",
+    "secretmanager":
+        "keyvault",
 
-   "kms":
-       "Azure Key Vault",
+    "kms":
+        "Azure Key Vault",
 
     "aws secretsmanager":
-       "az keyvault secret"
+        "az keyvault secret"
 }
 
 # ==========================================
@@ -126,6 +130,7 @@ repos = response.json()
 results = []
 
 os.makedirs("./temp", exist_ok=True)
+os.makedirs("./remediated", exist_ok=True)
 
 # ==========================================
 # SCAN REPOSITORIES
@@ -158,10 +163,6 @@ for repo in repos:
         print(f"Failed to clone {repo_name}")
         continue
 
-    # ==========================================
-    # WALK THROUGH FILES
-    # ==========================================
-
     for root, dirs, files in os.walk(local_path):
 
         for file in files:
@@ -182,13 +183,25 @@ for repo in repos:
 
                     lines = f.readlines()
 
+                    updated_lines = []
+
                     for line_number, line in enumerate(lines, start=1):
 
+                        remediated_line = line
                         line_lower = line.lower()
 
                         for pattern, details in SEARCH_PATTERNS.items():
 
                             if pattern.lower() in line_lower:
+
+                                if details["auto_replace_possible"] == "YES":
+
+                                    if pattern in AUTO_REPLACEMENTS:
+
+                                        remediated_line = remediated_line.replace(
+                                            pattern,
+                                            AUTO_REPLACEMENTS[pattern]
+                                        )
 
                                 results.append({
 
@@ -217,6 +230,26 @@ for repo in repos:
                                     "Suggested_Action":
                                         details["suggested_action"]
                                 })
+
+                        updated_lines.append(remediated_line)
+
+                remediation_path = file_path.replace(
+                    "./temp",
+                    "./remediated"
+                )
+
+                os.makedirs(
+                    os.path.dirname(remediation_path),
+                    exist_ok=True
+                )
+
+                with open(
+                    remediation_path,
+                    "w",
+                    encoding="utf-8"
+                ) as out:
+
+                    out.writelines(updated_lines)
 
             except Exception as e:
                 print(f"Could not read file: {file_path}")
@@ -274,4 +307,5 @@ with open(
 print("\n===================================")
 print("Scan completed successfully.")
 print("Report generated: scan-report.csv")
+print("Remediated files generated under ./remediated")
 print("===================================")
