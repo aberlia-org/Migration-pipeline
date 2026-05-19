@@ -98,6 +98,21 @@ SEARCH_PATTERNS = {
     }
 }
 
+AUTO_REPLACEMENTS = {
+
+   "aws-actions/configure-aws-credentials":
+       "azure/login",
+
+   "secretmanager":
+       "keyvault",
+
+   "kms":
+       "Azure Key Vault",
+
+    "aws secretsmanager":
+       "az keyvault secret"
+}
+
 # ==========================================
 # GET REPOSITORIES
 # ==========================================
