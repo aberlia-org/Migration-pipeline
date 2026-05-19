@@ -34,6 +34,7 @@ VALID_EXTENSIONS = [
 SEARCH_PATTERNS = {
     "aws-actions/configure-aws-credentials": {
         "azure_replacement": "azure/login",
+        "auto_replace_possible": "YES"
         "complexity": "Low",
         "suggested_action": "Auto migration possible"
     },
