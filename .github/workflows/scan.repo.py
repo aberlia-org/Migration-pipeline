@@ -9,7 +9,6 @@ import subprocess
 
 GITHUB_TOKEN = os.getenv("GH_TOKEN")
 
-# SOURCE ORGANIZATION
 ORG_NAME = "ambika-org2"
 
 HEADERS = {
@@ -17,7 +16,6 @@ HEADERS = {
     "Accept": "application/vnd.github.v3+json"
 }
 
-# VALID FILE TYPES TO SCAN
 VALID_EXTENSIONS = [
     ".yml",
     ".yaml",
@@ -30,59 +28,71 @@ VALID_EXTENSIONS = [
     ".properties"
 ]
 
-# AWS PATTERNS + AZURE REPLACEMENTS
+# ==========================================
+# AWS → AZURE REMEDIATION MAP
+# ==========================================
+
 SEARCH_PATTERNS = {
+
     "aws-actions/configure-aws-credentials": {
         "azure_replacement": "azure/login",
-        "auto_replace_possible": "YES"
+        "auto_replace_possible": "YES",
         "complexity": "Low",
         "suggested_action": "Auto migration possible"
     },
 
     "AWS_ROLE_ARN": {
         "azure_replacement": "Azure Managed Identity",
+        "auto_replace_possible": "REVIEW",
         "complexity": "Medium",
         "suggested_action": "Identity remediation required"
     },
 
     "aws_secret_access_key": {
         "azure_replacement": "Azure Key Vault Secret",
+        "auto_replace_possible": "REVIEW",
         "complexity": "High",
         "suggested_action": "Manual secret remediation required"
     },
 
     "aws-access-key-id": {
         "azure_replacement": "Azure Service Principal",
+        "auto_replace_possible": "REVIEW",
         "complexity": "Medium",
         "suggested_action": "Credential replacement required"
     },
 
     "secretmanager": {
         "azure_replacement": "Azure Key Vault",
+        "auto_replace_possible": "YES",
         "complexity": "Medium",
         "suggested_action": "Secret migration required"
     },
 
     "secretsmanager_secret_version": {
         "azure_replacement": "Azure Key Vault Versioning",
+        "auto_replace_possible": "YES",
         "complexity": "Medium",
         "suggested_action": "Versioning remediation required"
     },
 
     "kms": {
         "azure_replacement": "Azure Key Vault Encryption",
+        "auto_replace_possible": "YES",
         "complexity": "Medium",
         "suggested_action": "Encryption remediation required"
     },
 
     "boto3": {
         "azure_replacement": "Azure SDK",
+        "auto_replace_possible": "NO",
         "complexity": "High",
         "suggested_action": "Code remediation required"
     },
 
     "aws secretsmanager": {
         "azure_replacement": "az keyvault",
+        "auto_replace_possible": "REVIEW",
         "complexity": "High",
         "suggested_action": "CLI remediation required"
     }
@@ -100,7 +110,6 @@ repos = response.json()
 
 results = []
 
-# CREATE TEMP DIRECTORY
 os.makedirs("./temp", exist_ok=True)
 
 # ==========================================
@@ -115,10 +124,8 @@ for repo in repos:
 
     local_path = f"./temp/{repo_name}"
 
-    # DELETE OLD LOCAL COPY
     subprocess.run(["rm", "-rf", local_path])
 
-    # CLONE SOURCE REPOSITORY
     clone_command = [
         "git",
         "clone",
@@ -137,14 +144,13 @@ for repo in repos:
         continue
 
     # ==========================================
-    # WALK THROUGH ALL FILES
+    # WALK THROUGH FILES
     # ==========================================
 
     for root, dirs, files in os.walk(local_path):
 
         for file in files:
 
-            # SKIP NON-RELEVANT FILES
             if not file.endswith(tuple(VALID_EXTENSIONS)):
                 continue
 
@@ -161,7 +167,6 @@ for repo in repos:
 
                     lines = f.readlines()
 
-                    # CHECK EACH LINE
                     for line_number, line in enumerate(lines, start=1):
 
                         line_lower = line.lower()
@@ -171,14 +176,31 @@ for repo in repos:
                             if pattern.lower() in line_lower:
 
                                 results.append({
+
                                     "Repository": repo_name,
-                                    "File": file_path.replace(local_path, ""),
+
+                                    "File": file_path.replace(
+                                        local_path,
+                                        ""
+                                    ),
+
                                     "Line_Number": line_number,
+
                                     "AWS_Usage": pattern,
+
                                     "Matched_Line": line.strip(),
-                                    "Azure_Replacement": details["azure_replacement"],
-                                    "Complexity": details["complexity"],
-                                    "Suggested_Action": details["suggested_action"]
+
+                                    "Azure_Replacement":
+                                        details["azure_replacement"],
+
+                                    "Auto_Replace_Possible":
+                                        details["auto_replace_possible"],
+
+                                    "Complexity":
+                                        details["complexity"],
+
+                                    "Suggested_Action":
+                                        details["suggested_action"]
                                 })
 
             except Exception as e:
@@ -196,33 +218,40 @@ with open(
 ) as csvfile:
 
     fieldnames = [
+
         "Repository",
         "File",
         "Line_Number",
         "AWS_Usage",
         "Matched_Line",
         "Azure_Replacement",
+        "Auto_Replace_Possible",
         "Complexity",
         "Suggested_Action"
     ]
 
-    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    writer = csv.DictWriter(
+        csvfile,
+        fieldnames=fieldnames
+    )
 
     writer.writeheader()
 
-    # WRITE RESULTS
     if results:
+
         writer.writerows(results)
 
-    # IF NOTHING FOUND
     else:
+
         writer.writerow({
+
             "Repository": "No AWS usage detected",
             "File": "",
             "Line_Number": "",
             "AWS_Usage": "",
             "Matched_Line": "",
             "Azure_Replacement": "",
+            "Auto_Replace_Possible": "",
             "Complexity": "",
             "Suggested_Action": ""
         })
