@@ -254,6 +254,33 @@ for repo in repos:
             except Exception as e:
                 print(f"Could not read file: {file_path}")
 
+
+# CREATE BRANCH + COMMIT CHANGES
+
+subprocess.run([
+    "git", "-C", local_path,
+    "checkout", "-b", "azure-remediation"
+])
+
+subprocess.run([
+    "git", "-C", local_path,
+    "add", "."
+])
+
+subprocess.run([
+    "git", "-C", local_path,
+    "commit",
+    "-m",
+    "Auto Azure remediation"
+])
+
+subprocess.run([
+    "git", "-C", local_path,
+    "push",
+    "origin",
+    "azure-remediation"
+])
+
 # ==========================================
 # GENERATE CSV REPORT
 # ==========================================
