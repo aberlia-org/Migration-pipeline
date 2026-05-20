@@ -1,6 +1,8 @@
 name: Migration + Sonar + Gitleaks AnalysisMain
+
 on:
   workflow_dispatch:
+
 jobs:
   migrate-and-scan:
     runs-on: ubuntu-latest
@@ -86,6 +88,55 @@ jobs:
               --target-repo $repo \
               --github-source-pat $GH_SOURCE_PAT \
               --github-target-pat $GH_TARGET_PAT || true
+
+            # SECRET HANDLING
+
+            echo "Fetching source secret names..."
+
+            GH_TOKEN=$GH_SOURCE_PAT gh secret list \
+              --repo ambika-org2/$repo \
+              --json name \
+              -q '.[].name' > secret_names.txt
+
+            echo "Detected secrets:"
+
+            cat secret_names.txt
+
+            echo "Creating placeholder secrets in target..."
+
+            while read SECRET_NAME
+            do
+              [ -z "$SECRET_NAME" ] && continue
+
+              echo "Creating: $SECRET_NAME"
+
+              GH_TOKEN=$GH_TARGET_PAT gh secret set "$SECRET_NAME" \
+                --repo aberlia-org/$repo \
+                --body "TO_BE_UPDATED"
+
+            done < secret_names.txt
+
+            echo "Generating secret report..."
+
+            echo "Repository: $repo" > secret_report.txt
+
+            echo "Migration Status: SUCCESS" >> secret_report.txt
+
+            echo "" >> secret_report.txt
+
+            echo "Manual Secret Population Required" >> secret_report.txt
+
+            echo "" >> secret_report.txt
+
+            echo "Detected Source Secrets:" >> secret_report.txt
+
+            while read SECRET_NAME
+            do
+              [ -z "$SECRET_NAME" ] && continue
+
+              echo "- $SECRET_NAME" >> secret_report.txt
+
+            done < secret_names.txt
 
             # CLONE TARGET REPO
 
