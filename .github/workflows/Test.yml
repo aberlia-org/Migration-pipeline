@@ -1,8 +1,6 @@
 name: Migration + Sonar + Gitleaks AnalysisMain
-
 on:
   workflow_dispatch:
-
 jobs:
   migrate-and-scan:
     runs-on: ubuntu-latest
@@ -105,99 +103,6 @@ jobs:
             cd ..
             rm -rf target-$repo
           done < repos.txt
-
-      # SECRET HANDLING ENHANCEMENT
-      # PLACE AFTER GEI MIGRATION STEP
-
-      # 1. EXTRACT SECRET NAMES FROM SOURCE REPO
-
-      - name: Extract Source Secret Names
-        env:
-          GH_TOKEN: ${{ secrets.GH_SOURCE_PAT }}
-        run: |
-          echo "Fetching source secret names..."
-
-          gh secret list \
-            --repo ambika-org2/$repo \
-            --json name \
-            -q '.[].name' > secret_names.txt
-
-          echo "Detected Secrets:"
-          cat secret_names.txt
-
-      # 2. CREATE PLACEHOLDER SECRETS IN TARGET REPO
-
-      - name: Create Placeholder Secrets In Target Repo
-        env:
-          GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
-        run: |
-          echo "Creating placeholder secrets..."
-
-          while read SECRET_NAME
-          do
-            [ -z "$SECRET_NAME" ] && continue
-
-            echo "Creating: $SECRET_NAME"
-
-            gh secret set "$SECRET_NAME" \
-              --repo aberlia-org/$repo \
-              --body "TO_BE_UPDATED"
-
-          done < secret_names.txt
-
-      # 3. GENERATE SECRET REPORT FILE
-
-      - name: Generate Secret Report
-        run: |
-          echo "Repository: $repo" > secret_report.txt
-          echo "" >> secret_report.txt
-          echo "Migration Status: SUCCESS" >> secret_report.txt
-          echo "" >> secret_report.txt
-          echo "Manual Secret Population Required" >> secret_report.txt
-          echo "" >> secret_report.txt
-          echo "Detected Source Secrets:" >> secret_report.txt
-
-          while read SECRET_NAME
-          do
-            [ -z "$SECRET_NAME" ] && continue
-
-            echo "- $SECRET_NAME" >> secret_report.txt
-
-          done < secret_names.txt
-
-          echo ""
-          echo "Generated Report:"
-          cat secret_report.txt
-
-      # 4. PUBLISH GITHUB ACTIONS SUMMARY
-
-      - name: Publish Workflow Summary
-        run: |
-          echo "# Repository Migration Completed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Repository: $repo" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## Manual Secret Population Required" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          while read SECRET_NAME
-          do
-            [ -z "$SECRET_NAME" ] && continue
-
-            echo "- $SECRET_NAME" >> $GITHUB_STEP_SUMMARY
-
-          done < secret_names.txt
-
-      # 5. UPLOAD REPORT AS ARTIFACT
-
-      - name: Upload Secret Migration Report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: secret-report-${{ github.run_id }}
-          path: |
-            secret_names.txt
-            secret_report.txt
 
       # UPLOAD GITLEAKS REPORTS
 
