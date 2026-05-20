@@ -62,7 +62,7 @@ jobs:
             # CLONE SOURCE REPO
 
             git clone https://x-access-token:$GH_SOURCE_PAT@github.com/ambika-org2/$repo.git source-$SOURCE_REPO
-            cd source-$repo
+            cd source-$SOURCE_REPO
 
             # SONAR SCAN - SOURCE
 
@@ -182,7 +182,7 @@ jobs:
             # CLONE TARGET REPO
 
             git clone https://x-access-token:$GH_TARGET_PAT@github.com/aberlia-org/$repo.git target-$TARGET_REPO
-            cd target-$repo
+            cd target-$TARGET_REPO
 
             # SONAR SCAN - TARGET
 
