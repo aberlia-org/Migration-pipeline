@@ -142,6 +142,20 @@ jobs:
 
             done < secret_names.txt
 
+            echo "Creating organization secrets in target..."
+
+            while read ORG_SECRET
+            do
+              [ -z "$ORG_SECRET" ] && continue
+
+              echo "Creating org secret: $ORG_SECRET"
+
+              GH_TOKEN=$GH_TARGET_PAT gh secret set "$ORG_SECRET" \
+                --org aberlia-org \
+                --body "TO_BE_UPDATED"
+
+            done < org_secret_names.txt
+
             echo "Generating secret report..."
 
             echo "Repository: $repo" > secret_report.txt
