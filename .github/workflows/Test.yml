@@ -119,6 +119,15 @@ jobs:
 
             cat org_secret_names.txt
 
+            echo "========== ORG SECRET DEBUG =========="
+            if [ -s org_secret_names.txt ]; then
+              echo "Organization secrets extracted successfully:"
+              cat org_secret_names.txt
+            else
+              echo "No organization secrets extracted."
+            fi
+            echo "======================================"
+
             echo "Creating placeholder secrets in target..."
 
             while read SECRET_NAME
