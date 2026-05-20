@@ -55,7 +55,8 @@ jobs:
 
           while IFS=',' read SOURCE_REPO TARGET_REPO; do
             echo "====================================="
-            echo "Processing repo: $repo"
+            echo "Processing source repo: $SOURCE_REPO"
+            echo "Target repo: $TARGET_REPO"
             echo "====================================="
 
             # CLONE SOURCE REPO
