@@ -51,6 +51,8 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
+          echo "Repository,Status,SecretsFound" > migration_report.csv
+
           while read repo; do
             echo "====================================="
             echo "Processing repo: $repo"
@@ -101,6 +103,9 @@ jobs:
             echo "Detected secrets:"
 
             cat secret_names.txt
+
+            SECRET_COUNT=$(wc -l < secret_names.txt)
+            echo "$repo,SUCCESS,$SECRET_COUNT" >> migration_report.csv
 
             echo "Creating placeholder secrets in target..."
 
@@ -163,3 +168,10 @@ jobs:
         with:
           name: gitleaks-reports
           path: "*.json"
+
+      - name: Upload Consolidated CSV Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-csv-report
+          path: migration_report.csv
