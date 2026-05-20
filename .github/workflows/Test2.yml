@@ -51,16 +51,16 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          echo "Repository,Status,RepoSecrets,OrgSecrets" > migration_report.csv
+          echo "SourceRepo,TargetRepo,Status,RepoSecrets,OrgSecrets" > migration_report.csv
 
-          while read repo; do
+          while IFS=',' read SOURCE_REPO TARGET_REPO; do
             echo "====================================="
             echo "Processing repo: $repo"
             echo "====================================="
 
             # CLONE SOURCE REPO
 
-            git clone https://x-access-token:$GH_SOURCE_PAT@github.com/ambika-org2/$repo.git source-$repo
+            git clone https://x-access-token:$GH_SOURCE_PAT@github.com/ambika-org2/$repo.git source-$SOURCE_REPO
             cd source-$repo
 
             # SONAR SCAN - SOURCE
@@ -86,8 +86,8 @@ jobs:
             gh gei migrate-repo \
               --github-source-org ambika-org2 \
               --github-target-org aberlia-org \
-              --source-repo $repo \
-              --target-repo $repo \
+              --source-repo $SOURCE_REPO \
+              --target-repo $TARGET_REPO \
               --github-source-pat $GH_SOURCE_PAT \
               --github-target-pat $GH_TARGET_PAT || true
 
@@ -96,7 +96,7 @@ jobs:
             echo "Fetching source secret names..."
 
             GH_TOKEN=$GH_SOURCE_PAT gh secret list \
-              --repo ambika-org2/$repo \
+              --repo ambika-org2/$SOURCE_REPO \
               --json name \
               -q '.[].name' > secret_names.txt
 
@@ -113,7 +113,7 @@ jobs:
 
             REPO_SECRET_COUNT=$(wc -l < secret_names.txt)
             ORG_SECRET_COUNT=$(wc -l < org_secret_names.txt)
-            echo "$repo,SUCCESS,$REPO_SECRET_COUNT,$ORG_SECRET_COUNT" >> migration_report.csv
+            echo "$SOURCE_REPO,$TARGET_REPO,SUCCESS,$REPO_SECRET_COUNT,$ORG_SECRET_COUNT" >> migration_report.csv
 
             echo "Detected organization secrets:"
 
@@ -137,7 +137,7 @@ jobs:
               echo "Creating: $SECRET_NAME"
 
               GH_TOKEN=$GH_TARGET_PAT gh secret set "$SECRET_NAME" \
-                --repo aberlia-org/$repo \
+                --repo aberlia-org/$TARGET_REPO \
                 --body "TO_BE_UPDATED"
 
             done < secret_names.txt
@@ -180,7 +180,7 @@ jobs:
 
             # CLONE TARGET REPO
 
-            git clone https://x-access-token:$GH_TARGET_PAT@github.com/aberlia-org/$repo.git target-$repo
+            git clone https://x-access-token:$GH_TARGET_PAT@github.com/aberlia-org/$repo.git target-$TARGET_REPO
             cd target-$repo
 
             # SONAR SCAN - TARGET
