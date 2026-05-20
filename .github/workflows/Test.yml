@@ -51,7 +51,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          echo "Repository,Status,SecretsFound" > migration_report.csv
+          echo "Repository,Status,RepoSecrets,OrgSecrets" > migration_report.csv
 
           while read repo; do
             echo "====================================="
@@ -100,12 +100,24 @@ jobs:
               --json name \
               -q '.[].name' > secret_names.txt
 
+            echo "Fetching organization secret names..."
+
+            GH_TOKEN=$GH_SOURCE_PAT gh secret list \
+              --org ambika-org2 \
+              --json name \
+              -q '.[].name' > org_secret_names.txt
+
             echo "Detected secrets:"
 
             cat secret_names.txt
 
-            SECRET_COUNT=$(wc -l < secret_names.txt)
-            echo "$repo,SUCCESS,$SECRET_COUNT" >> migration_report.csv
+            REPO_SECRET_COUNT=$(wc -l < secret_names.txt)
+            ORG_SECRET_COUNT=$(wc -l < org_secret_names.txt)
+            echo "$repo,SUCCESS,$REPO_SECRET_COUNT,$ORG_SECRET_COUNT" >> migration_report.csv
+
+            echo "Detected organization secrets:"
+
+            cat org_secret_names.txt
 
             echo "Creating placeholder secrets in target..."
 
