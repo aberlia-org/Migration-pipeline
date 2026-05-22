@@ -51,7 +51,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          echo "SourceRepo,TargetRepo,Status,RepoSecrets,OrgSecrets" > migration_report.csv
+          echo "SourceRepo,TargetRepo,Status,RepoSecrets,OrgSecrets,SourceBranches,TargetBranches,BranchValidation,SourceCommits,TargetCommits,CommitValidation" > migration_report.csv
 
           while IFS=',' read SOURCE_REPO TARGET_REPO; do
             echo "====================================="
@@ -63,6 +63,14 @@ jobs:
 
             git clone "https://x-access-token:${GH_SOURCE_PAT}@github.com/ambika-org2/${SOURCE_REPO}.git" source-${SOURCE_REPO}
             cd source-${SOURCE_REPO}
+            
+            # SOURCE VALIDATION
+
+           SOURCE_BRANCH_COUNT=$(git branch -r | wc -l)
+           SOURCE_COMMIT_COUNT=$(git rev-list --all --count)
+
+           echo "Source Branch Count: $SOURCE_BRANCH_COUNT"
+           echo "Source Commit Count: $SOURCE_COMMIT_COUNT"
 
             # SONAR SCAN - SOURCE
 
@@ -114,7 +122,7 @@ jobs:
 
             REPO_SECRET_COUNT=$(wc -l < secret_names.txt)
             ORG_SECRET_COUNT=$(wc -l < org_secret_names.txt)
-            echo "$SOURCE_REPO,$TARGET_REPO,SUCCESS,$REPO_SECRET_COUNT,$ORG_SECRET_COUNT" >> migration_report.csv
+            echo "$SOURCE_REPO,$TARGET_REPO,SUCCESS,$REPO_SECRET_COUNT,$ORG_SECRET_COUNT,$SOURCE_BRANCH_COUNT,$TARGET_BRANCH_COUNT,$BRANCH_STATUS,$SOURCE_COMMIT_COUNT,$TARGET_COMMIT_COUNT,$COMMIT_STATUS" >> migration_report.csv
 
             echo "Detected organization secrets:"
 
@@ -183,6 +191,26 @@ jobs:
 
             git clone "https://x-access-token:${GH_TARGET_PAT}@github.com/aberlia-org/${TARGET_REPO}.git" target-${TARGET_REPO}
             cd target-${TARGET_REPO}
+            
+            # TARGET VALIDATION
+            
+            TARGET_BRANCH_COUNT=$(git branch -r | wc -l)
+            TARGET_COMMIT_COUNT=$(git rev-list --all --count)
+            echo "Target Branch Count: $TARGET_BRANCH_COUNT"
+            echo "Target Commit Count: $TARGET_COMMIT_COUNT"
+            # VALIDATION COMPARISON
+            if [ "$SOURCE_BRANCH_COUNT" -eq "$TARGET_BRANCH_COUNT" ]; then
+            BRANCH_STATUS="MATCHED"
+            else
+              BRANCH_STATUS="MISMATCH"
+            fi
+               if [ "$SOURCE_COMMIT_COUNT" -eq "$TARGET_COMMIT_COUNT" ]; then
+             COMMIT_STATUS="MATCHED"
+           else
+              COMMIT_STATUS="MISMATCH"
+            fi
+            echo "Branch Validation: $BRANCH_STATUS"
+            echo "Commit Validation: $COMMIT_STATUS"
 
             # SONAR SCAN - TARGET
 
