@@ -211,17 +211,15 @@ jobs:
            else
               COMMIT_STATUS="MISMATCH"
             fi
-            echo "DEBUG BRANCH_STATUS=$BRANCH_STATUS"
-            echo "DEBUG COMMIT_STATUS=$COMMIT_STATUS"
-            echo "DEBUG SOURCE_BRANCH_COUNT=$SOURCE_BRANCH_COUNT"
-            echo "DEBUG TARGET_BRANCH_COUNT=$TARGET_BRANCH_COUNT"
-            echo "DEBUG SOURCE_COMMIT_COUNT=$SOURCE_COMMIT_COUNT"
-            echo "DEBUG TARGET_COMMIT_COUNT=$TARGET_COMMIT_COUNT"
-            echo "Branch Validation: $BRANCH_STATUS"
-            echo "Commit Validation: $COMMIT_STATUS"
-            echo "$SOURCE_REPO,$TARGET_REPO,SUCCESS,$REPO_SECRET_COUNT,$ORG_SECRET_COUNT,$SOURCE_BRANCH_COUNT,$TARGET_BRANCH_COUNT,$BRANCH_STATUS,$SOURCE_COMMIT_COUNT,$TARGET_COMMIT_COUNT,$COMMIT_STATUS" >> migration_report.csv
-
-            # SONAR SCAN - TARGET
+            echo "DEBUG BRANCH_STATUS=${BRANCH_STATUS}"
+            echo "DEBUG COMMIT_STATUS=${COMMIT_STATUS}"
+            echo "DEBUG SOURCE_BRANCH_COUNT=${SOURCE_BRANCH_COUNT}"
+            echo "DEBUG TARGET_BRANCH_COUNT=${TARGET_BRANCH_COUNT}"
+            echo "DEBUG SOURCE_COMMIT_COUNT=${SOURCE_COMMIT_COUNT}"
+            echo "DEBUG TARGET_COMMIT_COUNT=${TARGET_COMMIT_COUNT}"
+            echo "Branch Validation: ${BRANCH_STATUS}"
+            echo "Commit Validation: ${COMMIT_STATUS}"
+            echo "${SOURCE_REPO},${TARGET_REPO},SUCCESS,${REPO_SECRET_COUNT},${ORG_SECRET_COUNT},${SOURCE_BRANCH_COUNT},${TARGET_BRANCH_COUNT},${BRANCH_STATUS},${SOURCE_COMMIT_COUNT},${TARGET_COMMIT_COUNT},${COMMIT_STATUS}" >> migration_report.csv
 
             sonar-scanner \
               -Dsonar.projectKey=${repo}-target \
