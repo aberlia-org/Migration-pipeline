@@ -219,6 +219,9 @@ jobs:
             echo "DEBUG6: TARGET_COMMIT_COUNT=$TARGET_COMMIT_COUNT"
             echo "Branch Validation: $BRANCH_STATUS"
             echo "Commit Validation: $COMMIT_STATUS"
+            
+            printf "TEST -> [%s] [%s] [%s] [%s]\n" "$BRANCH_STATUS" "$COMMIT_STATUS" "$SOURCE_BRANCH_COUNT" "$TARGET_BRANCH_COUNT"
+
             echo "$SOURCE_REPO,$TARGET_REPO,SUCCESS,$REPO_SECRET_COUNT,$ORG_SECRET_COUNT,$SOURCE_BRANCH_COUNT,$TARGET_BRANCH_COUNT,$BRANCH_STATUS,$SOURCE_COMMIT_COUNT,$TARGET_COMMIT_COUNT,$COMMIT_STATUS" >> migration_report.csv
 
             sonar-scanner \
