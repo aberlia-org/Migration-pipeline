@@ -51,7 +51,8 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          echo "SourceRepo,TargetRepo,Status,RepoSecrets,OrgSecrets,SourceBranches,TargetBranches,BranchValidation,SourceCommits,TargetCommits,CommitValidation" > migration_report.csv
+          echo "$SOURCE_REPO,$TARGET_REPO,SUCCESS,$REPO_SECRET_COUNT,$ORG_SECRET_COUNT,$SOURCE_BRANCH_COUNT,$TARGET_BRANCH_COUNT,$BRANCH_STATUS,$SOURCE_COMMIT_COUNT,$TARGET_COMMIT_COUNT,$COMMIT_STATUS" >> migration_report.csv
+ 
 
           while IFS=',' read SOURCE_REPO TARGET_REPO; do
             echo "====================================="
