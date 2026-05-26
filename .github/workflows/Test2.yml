@@ -215,8 +215,7 @@ jobs:
             echo DEBUG2_COMMIT_STATUS=$COMMIT_STATUS
             echo DEBUG3_SOURCE_BRANCH_COUNT=$SOURCE_BRANCH_COUNT
             echo DEBUG4_TARGET_BRANCH_COUNT=$TARGET_BRANCH_COUNT
-            set | grep BRANCH
-            set | grep COMMIT
+            env
             pwd
 
 
