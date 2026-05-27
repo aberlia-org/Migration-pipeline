@@ -52,12 +52,15 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
           echo "SourceRepo,TargetRepo,Status,RepoSecrets,OrgSecrets" > migration_report.csv
+          echo "" > source_repos.txt
+          echo "" > migrated_repos.txt
 
           while IFS=',' read SOURCE_REPO TARGET_REPO; do
             echo "====================================="
             echo "Processing source repo: $SOURCE_REPO"
             echo "Target repo: $TARGET_REPO"
             echo "====================================="
+            echo "$SOURCE_REPO" >> source_repos.txt
 
             # CLONE SOURCE REPO
 
@@ -91,6 +94,8 @@ jobs:
               --target-repo $TARGET_REPO \
               --github-source-pat $GH_SOURCE_PAT \
               --github-target-pat $GH_TARGET_PAT || true
+
+            echo "$TARGET_REPO" >> migrated_repos.txt
 
             # SECRET HANDLING
 
@@ -195,6 +200,21 @@ jobs:
             cd ..
             rm -rf target-$repo
           done < repos.txt
+
+          echo "===== REPO VALIDATION ====="
+          SOURCE_COUNT=$(sort source_repos.txt | grep -v '^$' | wc -l)
+          TARGET_COUNT=$(sort migrated_repos.txt | grep -v '^$' | wc -l)
+          echo "Source repo count: $SOURCE_COUNT"
+          echo "Migrated repo count: $TARGET_COUNT"
+          if [ "$SOURCE_COUNT" -eq "$TARGET_COUNT" ]; then
+            echo "VALIDATION SUCCESS: Repo counts match."
+          else
+            echo "VALIDATION WARNING: Repo counts do NOT match."
+          fi
+          echo "Source repos:"
+          cat source_repos.txt
+          echo "Migrated repos:"
+          cat migrated_repos.txt
 
       # UPLOAD GITLEAKS REPORTS
 
