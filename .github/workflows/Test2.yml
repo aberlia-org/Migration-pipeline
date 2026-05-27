@@ -206,6 +206,7 @@ jobs:
           TARGET_COUNT=$(sort migrated_repos.txt | grep -v '^$' | wc -l)
           echo "Source repo count: $SOURCE_COUNT"
           echo "Migrated repo count: $TARGET_COUNT"
+          echo "Validation,$SOURCE_COUNT,$TARGET_COUNT" >> migration_report.csv
           if [ "$SOURCE_COUNT" -eq "$TARGET_COUNT" ]; then
             echo "VALIDATION SUCCESS: Repo counts match."
           else
