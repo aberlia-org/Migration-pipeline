@@ -1,4 +1,4 @@
-name: Migration + Sonar + Gitleaks AnalysisMainRead
+name: Migration + Sonar + Gitleaks AnalysisMainReadvalid
 
 on:
   workflow_dispatch:
