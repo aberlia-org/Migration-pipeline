@@ -11,7 +11,7 @@ jobs:
       # CHECKOUT PIPELINE REPO
 
       - name: Checkout pipeline repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           lfs: true
 
@@ -187,3 +187,62 @@ jobs:
               echo "Creating org secret: $ORG_SECRET"
 
               GH_TOKEN=$GH_TARGET_PAT gh secret set "$ORG_SECRET" \
+                --org aberlia-org \
+                --body "TO_BE_UPDATED"
+
+            done < org_secret_names.txt
+
+            echo "Generating secret report..."
+
+            echo "Repository: $repo" > secret_report.txt
+
+            echo "Migration Status: SUCCESS" >> secret_report.txt
+
+            echo "" >> secret_report.txt
+
+            echo "Manual Secret Population Required" >> secret_report.txt
+
+            echo "" >> secret_report.txt
+
+            echo "Detected Source Secrets:" >> secret_report.txt
+
+            while read SECRET_NAME
+            do
+              [ -z "$SECRET_NAME" ] && continue
+
+              echo "- $SECRET_NAME" >> secret_report.txt
+
+            done < secret_names.txt
+
+            # CLONE TARGET REPO
+
+            git clone "https://x-access-token:${GH_TARGET_PAT}@github.com/aberlia-org/${TARGET_REPO}.git" target-${TARGET_REPO}
+            cd target-${TARGET_REPO}
+
+            # SONAR SCAN - TARGET
+
+            sonar-scanner \
+              -Dsonar.projectKey=${repo}-target \
+              -Dsonar.organization=aberlia-org \
+              -Dsonar.sources=. \
+              -Dsonar.host.url=$SONAR_HOST_URL \
+              -Dsonar.login=$SONAR_TOKEN
+            cd ..
+            rm -rf target-$repo
+          done < repos.txt
+
+      # UPLOAD GITLEAKS REPORTS
+
+      - name: Upload Gitleaks Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-reports
+          path: "*.json"
+
+      - name: Upload Consolidated CSV Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-csv-report
+          path: migration_report.csv
