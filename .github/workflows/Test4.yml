@@ -61,13 +61,13 @@ jobs:
 
             # CLONE SOURCE REPO
 
-            git clone "https://x-access-token:${GH_SOURCE_PAT}@github.com/${SOURCE_ORG}/${SOURCE_REPO}.git"
+            git clone "https://x-access-token:${GH_SOURCE_PAT}@github.com/${SOURCE_ORG}/${SOURCE_REPO}.git" "source-${SOURCE_REPO}"
             cd source-${SOURCE_REPO}
 
             # SONAR SCAN - SOURCE
 
             sonar-scanner \
-              -Dsonar.projectKey=${repo}-source \
+              -Dsonar.projectKey=${SOURCE_REPO}-source \
               -Dsonar.organization=aberlia-org \
               -Dsonar.sources=. \
               -Dsonar.host.url=$SONAR_HOST_URL \
@@ -80,7 +80,7 @@ jobs:
               --report-path ../${repo}-gitleaks-report.json \
               --verbose
             cd ..
-            rm -rf source-$repo
+            rm -rf source-${SOURCE_REPO}
 
             # MIGRATION
 
@@ -216,19 +216,19 @@ jobs:
 
             # CLONE TARGET REPO
 
-            git clone "https://x-access-token:${GH_TARGET_PAT}@github.com/${TARGET_ORG}/${TARGET_REPO}.git"
+            git clone "https://x-access-token:${GH_TARGET_PAT}@github.com/${TARGET_ORG}/${TARGET_REPO}.git" "target-${TARGET_REPO}"
             cd target-${TARGET_REPO}
 
             # SONAR SCAN - TARGET
 
             sonar-scanner \
-              -Dsonar.projectKey=${repo}-target \
+              -Dsonar.projectKey=${TARGET_REPO}-target \
               -Dsonar.organization=aberlia-org \
               -Dsonar.sources=. \
               -Dsonar.host.url=$SONAR_HOST_URL \
               -Dsonar.login=$SONAR_TOKEN
             cd ..
-            rm -rf target-$repo
+            rm -rf target-${TARGET_REPO}
           done < repos.txt
 
       # UPLOAD GITLEAKS REPORTS
