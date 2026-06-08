@@ -51,7 +51,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          echo "SourceRepo,TargetRepo,Status,RepoSecrets,OrgSecrets" > migration_report.csv
+          echo "SourceRepo,TargetRepo,BuildType,Status,RepoSecrets,OrgSecrets" > migration_report.csv
 
           while IFS=',' read SOURCE_ORG SOURCE_REPO TARGET_ORG TARGET_REPO; do
             echo "====================================="
@@ -63,6 +63,20 @@ jobs:
 
             git clone "https://x-access-token:${GH_SOURCE_PAT}@github.com/${SOURCE_ORG}/${SOURCE_REPO}.git" "source-${SOURCE_REPO}"
             cd source-${SOURCE_REPO}
+
+            # DETECT BUILD TYPE
+
+            BUILD_TYPE="unknown"
+            if [ -f "pom.xml" ]; then
+              BUILD_TYPE="maven"
+            elif [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
+              BUILD_TYPE="gradle"
+            elif [ -f "package.json" ]; then
+              BUILD_TYPE="nodejs"
+            elif ls *.csproj *.sln >/dev/null 2>&1; then
+              BUILD_TYPE="dotnet"
+            fi
+            echo "Detected build type: $BUILD_TYPE"
 
             # SONAR SCAN - SOURCE
 
@@ -109,8 +123,7 @@ jobs:
             if [ "$migration_success" != "true" ]; then
               echo "Migration failed after 3 attempts"
 
-              echo "$SOURCE_REPO,$TARGET_REPO,FAILED,MIGRATION_ERROR" \
-                >> migration_report.csv
+              echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,FAILED,MIGRATION_ERROR" >> migration_report.csv
 
               continue
             fi
@@ -121,8 +134,7 @@ jobs:
             else
               echo "Validation failed: Repository not found after migration"
 
-              echo "$SOURCE_REPO,$TARGET_REPO,FAILED,VALIDATION_ERROR" \
-                >> migration_report.csv
+              echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,FAILED,VALIDATION_ERROR" >> migration_report.csv
 
               continue
             fi
@@ -143,15 +155,15 @@ jobs:
               --json name \
               -q '.[].name' > org_secret_names.txt
 
-            echo "Detected secrets:"
+            echo "Repository secrets detected: $REPO_SECRET_COUNT"
 
             cat secret_names.txt
 
             REPO_SECRET_COUNT=$(wc -l < secret_names.txt)
             ORG_SECRET_COUNT=$(wc -l < org_secret_names.txt)
-            echo "$SOURCE_REPO,$TARGET_REPO,SUCCESS,$REPO_SECRET_COUNT,$ORG_SECRET_COUNT" >> migration_report.csv
+            echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,SUCCESS,$REPO_SECRET_COUNT,$ORG_SECRET_COUNT" >> migration_report.csv
 
-            echo "Detected organization secrets:"
+            echo "Organization secrets detected: $ORG_SECRET_COUNT"
 
             cat org_secret_names.txt
 
