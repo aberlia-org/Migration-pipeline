@@ -1,0 +1,248 @@
+name: Migration + Sonar + Gitleaks AnalysisMainReadvalid
+
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate-and-scan:
+    runs-on: ubuntu-latest
+    steps:
+
+      # CHECKOUT PIPELINE REPO
+
+      - name: Checkout pipeline repo
+        uses: actions/checkout@v3
+        with:
+          lfs: true
+
+      # INSTALL GEI
+
+      - name: Install GHE extension
+        env:
+          GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
+        run: |
+          gh extension install github/gh-gei
+
+      # INSTALL SONAR SCANNER
+
+      - name: Install Sonar Scanner
+        run: |
+          curl -sSLo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+          unzip sonar-scanner.zip
+          mv sonar-scanner-* sonar-scanner
+          echo "$PWD/sonar-scanner/bin" >> $GITHUB_PATH
+
+      # INSTALL GITLEAKS
+
+      - name: Install Gitleaks
+        run: |
+          wget https://github.com/gitleaks/gitleaks/releases/download/v8.18.2/gitleaks_8.18.2_linux_x64.tar.gz
+          tar -xzf gitleaks_8.18.2_linux_x64.tar.gz
+          chmod +x gitleaks
+          sudo mv gitleaks /usr/local/bin/
+
+      # MAIN PROCESS
+
+      - name: Migrate and Scan Repos
+        env:
+          GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
+          GH_SOURCE_PAT: ${{ secrets.GH_SOURCE_PAT }}
+          GH_TARGET_PAT: ${{ secrets.GH_TARGET_PAT }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          echo "SourceRepo,TargetRepo,Status,RepoSecrets,OrgSecrets" > migration_report.csv
+
+          while IFS=',' read SOURCE_ORG SOURCE_REPO TARGET_ORG TARGET_REPO; do
+            echo "====================================="
+            echo "Processing source repo: $SOURCE_REPO"
+            echo "Target repo: $TARGET_REPO"
+            echo "====================================="
+
+            # CLONE SOURCE REPO
+
+            git clone "https://x-access-token:${GH_SOURCE_PAT}@github.com/${SOURCE_ORG}/${SOURCE_REPO}.git" "source-${SOURCE_REPO}"
+            cd source-${SOURCE_REPO}
+
+            # SONAR SCAN - SOURCE
+
+            sonar-scanner \
+              -Dsonar.projectKey=${SOURCE_REPO}-source \
+              -Dsonar.organization=aberlia-org \
+              -Dsonar.sources=. \
+              -Dsonar.host.url=$SONAR_HOST_URL \
+              -Dsonar.login=$SONAR_TOKEN
+
+            # GITLEAKS SCAN - SOURCE
+
+            gitleaks detect \
+              --source . \
+              --report-path ../${repo}-gitleaks-report.json \
+              --verbose
+            cd ..
+            rm -rf source-${SOURCE_REPO}
+
+            # MIGRATION
+
+            migration_success=false
+
+            for attempt in 1 2 3
+            do
+              echo "Migration attempt $attempt for $SOURCE_REPO"
+
+              if gh gei migrate-repo \
+                  --github-source-org "$SOURCE_ORG" \
+                  --github-target-org "$TARGET_ORG" \
+                  --source-repo "$SOURCE_REPO" \
+                  --target-repo "$TARGET_REPO" \
+                  --github-source-pat "$GH_SOURCE_PAT" \
+                  --github-target-pat "$GH_TARGET_PAT"
+              then
+                  migration_success=true
+                  break
+              fi
+
+              echo "Attempt $attempt failed"
+              sleep 30
+            done
+
+            if [ "$migration_success" != "true" ]; then
+              echo "Migration failed after 3 attempts"
+
+              echo "$SOURCE_REPO,$TARGET_REPO,FAILED,MIGRATION_ERROR" \
+                >> migration_report.csv
+
+              continue
+            fi
+
+            if GH_TOKEN=$GH_TARGET_PAT gh repo view $TARGET_ORG/$TARGET_REPO >/dev/null 2>&1
+            then
+              echo "Validation successful: Target repository exists"
+            else
+              echo "Validation failed: Repository not found after migration"
+
+              echo "$SOURCE_REPO,$TARGET_REPO,FAILED,VALIDATION_ERROR" \
+                >> migration_report.csv
+
+              continue
+            fi
+
+            # SECRET HANDLING
+
+            echo "Fetching source secret names..."
+
+            GH_TOKEN=$GH_SOURCE_PAT gh secret list \
+              --repo $SOURCE_ORG/$SOURCE_REPO \
+              --json name \
+              -q '.[].name' > secret_names.txt
+
+            echo "Fetching organization secret names..."
+
+            GH_TOKEN=$GH_SOURCE_PAT gh secret list \
+              --org $SOURCE_ORG \
+              --json name \
+              -q '.[].name' > org_secret_names.txt
+
+            echo "Detected secrets:"
+
+            cat secret_names.txt
+
+            REPO_SECRET_COUNT=$(wc -l < secret_names.txt)
+            ORG_SECRET_COUNT=$(wc -l < org_secret_names.txt)
+            echo "$SOURCE_REPO,$TARGET_REPO,SUCCESS,$REPO_SECRET_COUNT,$ORG_SECRET_COUNT" >> migration_report.csv
+
+            echo "Detected organization secrets:"
+
+            cat org_secret_names.txt
+
+            echo "========== ORG SECRET DEBUG =========="
+            if [ -s org_secret_names.txt ]; then
+              echo "Organization secrets extracted successfully:"
+              cat org_secret_names.txt
+            else
+              echo "No organization secrets extracted."
+            fi
+            echo "======================================"
+
+            echo "Creating placeholder secrets in target..."
+
+            while read SECRET_NAME
+            do
+              [ -z "$SECRET_NAME" ] && continue
+
+              echo "Creating: $SECRET_NAME"
+
+              GH_TOKEN=$GH_TARGET_PAT gh secret set "$SECRET_NAME" \
+                --repo $TARGET_ORG/$TARGET_REPO \
+                --body "TO_BE_UPDATED"
+
+            done < secret_names.txt
+
+            echo "Creating organization secrets in target..."
+
+            while read ORG_SECRET
+            do
+              [ -z "$ORG_SECRET" ] && continue
+
+              echo "Creating org secret: $ORG_SECRET"
+
+              GH_TOKEN=$GH_TARGET_PAT gh secret set "$ORG_SECRET" \
+                --org $TARGET_ORG \
+                --body "TO_BE_UPDATED"
+
+            done < org_secret_names.txt
+
+            echo "Generating secret report..."
+
+            echo "Repository: $repo" > secret_report.txt
+
+            echo "Migration Status: SUCCESS" >> secret_report.txt
+
+            echo "" >> secret_report.txt
+
+            echo "Manual Secret Population Required" >> secret_report.txt
+
+            echo "" >> secret_report.txt
+
+            echo "Detected Source Secrets:" >> secret_report.txt
+
+            while read SECRET_NAME
+            do
+              [ -z "$SECRET_NAME" ] && continue
+
+              echo "- $SECRET_NAME" >> secret_report.txt
+
+            done < secret_names.txt
+
+            # CLONE TARGET REPO
+
+            git clone "https://x-access-token:${GH_TARGET_PAT}@github.com/${TARGET_ORG}/${TARGET_REPO}.git" "target-${TARGET_REPO}"
+            cd target-${TARGET_REPO}
+
+            # SONAR SCAN - TARGET
+
+            sonar-scanner \
+              -Dsonar.projectKey=${TARGET_REPO}-target \
+              -Dsonar.organization=aberlia-org \
+              -Dsonar.sources=. \
+              -Dsonar.host.url=$SONAR_HOST_URL \
+              -Dsonar.login=$SONAR_TOKEN
+            cd ..
+            rm -rf target-${TARGET_REPO}
+          done < repos.txt
+
+      # UPLOAD GITLEAKS REPORTS
+
+      - name: Upload Gitleaks Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-reports
+          path: "*.json"
+
+      - name: Upload Consolidated CSV Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-csv-report
+          path: migration_report.csv
