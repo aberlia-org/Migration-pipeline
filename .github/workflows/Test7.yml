@@ -51,7 +51,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          echo "SourceRepo,TargetRepo,BuildType,Status,RepoSecretCount,OrgSecretCount,RepoSecretNames,OrgSecretNames" > migration_report.csv
+          echo "SourceRepo,TargetRepo,BuildType,Status" > migration_report.csv
           while IFS=',' read SOURCE_ORG SOURCE_REPO TARGET_ORG TARGET_REPO; do
             echo "====================================="
             echo "Processing source repo: $SOURCE_REPO"
@@ -137,96 +137,6 @@ jobs:
 
               continue
             fi
-
-            # SECRET HANDLING
-
-            echo "Fetching source secret names..."
-
-            GH_TOKEN=$GH_SOURCE_PAT gh secret list \
-              --repo $SOURCE_ORG/$SOURCE_REPO \
-              --json name \
-              -q '.[].name' > secret_names.txt
-
-            echo "Fetching organization secret names..."
-
-            GH_TOKEN=$GH_SOURCE_PAT gh secret list \
-              --org $SOURCE_ORG \
-              --json name \
-              -q '.[].name' > org_secret_names.txt
-
-            echo "Repository secrets detected: $REPO_SECRET_COUNT"
-
-            cat secret_names.txt
-
-            REPO_SECRET_COUNT=$(wc -l < secret_names.txt)
-            ORG_SECRET_COUNT=$(wc -l < org_secret_names.txt)
-            REPO_SECRET_NAMES=$(paste -sd ";" secret_names.txt)
-            ORG_SECRET_NAMES=$(paste -sd ";" org_secret_names.txt)
-           echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,SUCCESS,$REPO_SECRET_COUNT,$ORG_SECRET_COUNT,\"$REPO_SECRET_NAMES\",\"$ORG_SECRET_NAMES\"" >> migration_report.csv
-
-            echo "Organization secrets detected: $ORG_SECRET_COUNT"
-
-            cat org_secret_names.txt
-
-            echo "========== ORG SECRET DEBUG =========="
-            if [ -s org_secret_names.txt ]; then
-              echo "Organization secrets extracted successfully:"
-              cat org_secret_names.txt
-            else
-              echo "No organization secrets extracted."
-            fi
-            echo "======================================"
-
-            echo "Creating placeholder secrets in target..."
-
-            while read SECRET_NAME
-            do
-              [ -z "$SECRET_NAME" ] && continue
-
-              echo "Creating: $SECRET_NAME"
-
-              GH_TOKEN=$GH_TARGET_PAT gh secret set "$SECRET_NAME" \
-                --repo $TARGET_ORG/$TARGET_REPO \
-                --body "TO_BE_UPDATED"
-
-            done < secret_names.txt
-
-            echo "Creating organization secrets in target..."
-
-            while read ORG_SECRET
-            do
-              [ -z "$ORG_SECRET" ] && continue
-
-              echo "Creating org secret: $ORG_SECRET"
-
-              GH_TOKEN=$GH_TARGET_PAT gh secret set "$ORG_SECRET" \
-                --org $TARGET_ORG \
-                --body "TO_BE_UPDATED"
-
-            done < org_secret_names.txt
-
-            echo "Generating secret report..."
-
-            echo "Repository: $repo" > secret_report.txt
-
-            echo "Migration Status: SUCCESS" >> secret_report.txt
-
-            echo "" >> secret_report.txt
-
-            echo "Manual Secret Population Required" >> secret_report.txt
-
-            echo "" >> secret_report.txt
-
-            echo "Detected Source Secrets:" >> secret_report.txt
-
-            while read SECRET_NAME
-            do
-              [ -z "$SECRET_NAME" ] && continue
-
-              echo "- $SECRET_NAME" >> secret_report.txt
-
-            done < secret_names.txt
-
             # CLONE TARGET REPO
 
             git clone "https://x-access-token:${GH_TARGET_PAT}@github.com/${TARGET_ORG}/${TARGET_REPO}.git" "target-${TARGET_REPO}"
