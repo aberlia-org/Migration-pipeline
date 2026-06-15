@@ -130,6 +130,7 @@ jobs:
             if GH_TOKEN=$GH_TARGET_PAT gh repo view $TARGET_ORG/$TARGET_REPO >/dev/null 2>&1
             then
               echo "Validation successful: Target repository exists"
+              echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,SUCCESS" >> migration_report.csv
             else
               echo "Validation failed: Repository not found after migration"
 
