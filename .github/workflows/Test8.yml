@@ -137,7 +137,7 @@ jobs:
             if GH_TOKEN=$GH_TARGET_PAT gh repo view $TARGET_ORG/$TARGET_REPO >/dev/null 2>&1
             then
               echo "Validation successful: Target repository exists"
-              
+              echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,SUCCESS,$SOURCE_DEFAULT_BRANCH,$TARGET_DEFAULT_BRANCH,$SOURCE_COMMIT_COUNT,$TARGET_COMMIT_COUNT,$SOURCE_BRANCH_COUNT,$TARGET_BRANCH_COUNT,$SOURCE_LATEST_COMMIT,$TARGET_LATEST_COMMIT,$LATEST_COMMIT_AUTHOR,$LATEST_COMMIT_DATE" >> migration_report.csv
             else
               echo "Validation failed: Repository not found after migration"
 
@@ -149,12 +149,19 @@ jobs:
 
             git clone "https://x-access-token:${GH_TARGET_PAT}@github.com/${TARGET_ORG}/${TARGET_REPO}.git" "target-${TARGET_REPO}"
             cd target-${TARGET_REPO}
-            TARGET_DEFAULT_BRANCH=$(GH_TOKEN=$GH_TARGET_PAT gh repo view ${TARGET_ORG}/${TARGET_REPO} --json defaultBranchRef --jq '.defaultBranchRef.name')
+            echo "Target Org: $TARGET_ORG"
+            echo "Target Repo: $TARGET_REPO"
+            GH_TOKEN=$GH_TARGET_PAT gh repo view ${TARGET_ORG}/${TARGET_REPO}
+            TARGET_DEFAULT_BRANCH=$(git remote show origin | sed -n '/HEAD branch/s/.*: //p')
             TARGET_COMMIT_COUNT=$(git rev-list --count HEAD)
             TARGET_BRANCH_COUNT=$(git branch -a | grep -v HEAD | wc -l)
             TARGET_LATEST_COMMIT=$(git rev-parse HEAD)
+            echo "Target default branch: $TARGET_DEFAULT_BRANCH"
+            echo "Target commit count: $TARGET_COMMIT_COUNT"
+            echo "Target branch count: $TARGET_BRANCH_COUNT"
+            echo "Target latest commit: $TARGET_LATEST_COMMIT"
             echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,SUCCESS,$SOURCE_DEFAULT_BRANCH,$TARGET_DEFAULT_BRANCH,$SOURCE_COMMIT_COUNT,$TARGET_COMMIT_COUNT,$SOURCE_BRANCH_COUNT,$TARGET_BRANCH_COUNT,$SOURCE_LATEST_COMMIT,$TARGET_LATEST_COMMIT,$LATEST_COMMIT_AUTHOR,$LATEST_COMMIT_DATE" >> migration_report.csv
-            
+
             sonar-scanner \
               -Dsonar.projectKey=${TARGET_REPO}-target \
               -Dsonar.organization=aberlia-org \
