@@ -63,7 +63,7 @@ jobs:
             git clone "https://x-access-token:${GH_SOURCE_PAT}@github.com/${SOURCE_ORG}/${SOURCE_REPO}.git" "source-${SOURCE_REPO}"
             cd source-${SOURCE_REPO}
             # Source repository information
-            SOURCE_DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
+            SOURCE_DEFAULT_BRANCH=$(git remote show origin | sed -n '/HEAD branch/s/.*: //p')
             SOURCE_COMMIT_COUNT=$(git rev-list --count HEAD)
             SOURCE_BRANCH_COUNT=$(git branch -r | grep -v HEAD | wc -l)
             SOURCE_LATEST_COMMIT=$(git rev-parse HEAD)
@@ -150,7 +150,7 @@ jobs:
             git clone "https://x-access-token:${GH_TARGET_PAT}@github.com/${TARGET_ORG}/${TARGET_REPO}.git" "target-${TARGET_REPO}"
             cd target-${TARGET_REPO}
             # Target repository information
-              TARGET_DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
+              TARGET_DEFAULT_BRANCH=$(git remote show origin | sed -n '/HEAD branch/s/.*: //p')
               TARGET_COMMIT_COUNT=$(git rev-list --count HEAD)
               TARGET_BRANCH_COUNT=$(git branch -r | grep -v HEAD | wc -l)
               TARGET_LATEST_COMMIT=$(git rev-parse HEAD)
