@@ -53,6 +53,15 @@ jobs:
         run: |
           echo "SourceRepo,TargetRepo,BuildType,Status,SourceDefaultBranch,TargetDefaultBranch,SourceCommitCount,TargetCommitCount,SourceBranchCount,TargetBranchCount,SourceLatestCommit,TargetLatestCommit,LatestCommitAuthor,LatestCommitDate" > migration_report.csv
           sed -i 's/\r//' repos.txt
+          echo "=== DEBUG START ==="
+          echo "repos.txt exists: $(ls -la repos.txt)"
+          echo "repos.txt raw content:"
+          cat -A repos.txt
+          echo "=== TESTING READ ==="
+          while IFS=',' read SOURCE_ORG SOURCE_REPO TARGET_ORG TARGET_REPO; do
+          echo "READ TEST - ORG:$SOURCE_ORG REPO:$SOURCE_REPO TARGET_ORG:$TARGET_ORG TARGET_REPO:$TARGET_REPO"
+          done < repos.txt
+          echo "=== STARTING MAIN LOOP ==="
           while IFS=',' read SOURCE_ORG SOURCE_REPO TARGET_ORG TARGET_REPO; do
             echo "====================================="
             echo "Processing source repo: $SOURCE_REPO"
