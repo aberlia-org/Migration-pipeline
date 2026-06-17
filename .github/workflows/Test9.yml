@@ -137,7 +137,7 @@ jobs:
             if GH_TOKEN=$GH_TARGET_PAT gh repo view $TARGET_ORG/$TARGET_REPO >/dev/null 2>&1
             then
               echo "Validation successful: Target repository exists"
-              echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,SUCCESS,$SOURCE_DEFAULT_BRANCH,$TARGET_DEFAULT_BRANCH,$SOURCE_COMMIT_COUNT,$TARGET_COMMIT_COUNT,$SOURCE_BRANCH_COUNT,$TARGET_BRANCH_COUNT,$SOURCE_LATEST_COMMIT,$TARGET_LATEST_COMMIT,$LATEST_COMMIT_AUTHOR,$LATEST_COMMIT_DATE" >> migration_report.csv
+        
             else
               echo "Validation failed: Repository not found after migration"
 
@@ -168,7 +168,7 @@ jobs:
             echo "Target commit count: $TARGET_COMMIT_COUNT"
             echo "Target branch count: $TARGET_BRANCH_COUNT"
             echo "Target latest commit: $TARGET_LATEST_COMMIT"
-            echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,$STATUS,$SOURCE_DEFAULT_BRANCH,$TARGET_DEFAULT_BRANCH,$SOURCE_COMMIT_COUNT,$TARGET_COMMIT_COUNT,$SOURCE_BRANCH_COUNT,$TARGET_BRANCH_COUNT,$SOURCE_LATEST_COMMIT,$TARGET_LATEST_COMMIT,$LATEST_COMMIT_AUTHOR,$LATEST_COMMIT_DATE" >> migration_report.csv
+            echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,SUCCESS,$SOURCE_DEFAULT_BRANCH,$TARGET_DEFAULT_BRANCH,$SOURCE_COMMIT_COUNT,$TARGET_COMMIT_COUNT,$SOURCE_BRANCH_COUNT,$TARGET_BRANCH_COUNT,$SOURCE_LATEST_COMMIT,$TARGET_LATEST_COMMIT,$LATEST_COMMIT_AUTHOR,$LATEST_COMMIT_DATE" >> migration_report.csv
             echo "CSV DEBUG: $(tail -n 1 migration_report.csv)"
             sonar-scanner \
               -Dsonar.projectKey=${TARGET_REPO}-target \
