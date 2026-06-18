@@ -53,6 +53,7 @@ jobs:
         run: |
           echo "SourceRepo,TargetRepo,BuildType,Status,SourceDefaultBranch,TargetDefaultBranch,SourceCommitCount,TargetCommitCount,SourceBranchCount,TargetBranchCount,SourceLatestCommit,TargetLatestCommit,LatestCommitAuthor,LatestCommitDate" > migration_report.csv
           sed -i 's/\r//' repos.txt
+          REPORT_FILE="$PWD/migration_report.csv"
           echo "=== DEBUG START ==="
           echo "repos.txt exists: $(ls -la repos.txt)"
           echo "repos.txt raw content:"
@@ -139,7 +140,7 @@ jobs:
             if [ "$migration_success" != "true" ]; then
               echo "Migration failed after 3 attempts"
 
-              echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,FAILED,MIGRATION_ERROR" >> migration_report.csv
+              echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,FAILED,MIGRATION_ERROR" >> $REPORT_FILE
 
               continue
             fi
@@ -151,7 +152,7 @@ jobs:
             else
               echo "Validation failed: Repository not found after migration"
 
-              echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,FAILED,VALIDATION_ERROR" >> migration_report.csv
+              echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,FAILED,VALIDATION_ERROR" >> $REPORT_FILE
 
               continue
             fi
@@ -178,7 +179,7 @@ jobs:
             echo "Target commit count: $TARGET_COMMIT_COUNT"
             echo "Target branch count: $TARGET_BRANCH_COUNT"
             echo "Target latest commit: $TARGET_LATEST_COMMIT"
-            echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,SUCCESS,$SOURCE_DEFAULT_BRANCH,$TARGET_DEFAULT_BRANCH,$SOURCE_COMMIT_COUNT,$TARGET_COMMIT_COUNT,$SOURCE_BRANCH_COUNT,$TARGET_BRANCH_COUNT,$SOURCE_LATEST_COMMIT,$TARGET_LATEST_COMMIT,$LATEST_COMMIT_AUTHOR,$LATEST_COMMIT_DATE" >> migration_report.csv
+            echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,SUCCESS,$SOURCE_DEFAULT_BRANCH,$TARGET_DEFAULT_BRANCH,$SOURCE_COMMIT_COUNT,$TARGET_COMMIT_COUNT,$SOURCE_BRANCH_COUNT,$TARGET_BRANCH_COUNT,$SOURCE_LATEST_COMMIT,$TARGET_LATEST_COMMIT,$LATEST_COMMIT_AUTHOR,$LATEST_COMMIT_DATE" >> $REPORT_FILE
             echo "CSV DEBUG: $(tail -n 1 migration_report.csv)"
             sonar-scanner \
               -Dsonar.projectKey=${TARGET_REPO}-target \
