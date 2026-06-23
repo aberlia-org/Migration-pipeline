@@ -65,6 +65,7 @@ jobs:
 
             git clone "https://x-access-token:${GH_SOURCE_PAT}@github.com/${SOURCE_ORG}/${SOURCE_REPO}.git" "source-${SOURCE_REPO}"
             cd source-${SOURCE_REPO}
+
             # Source repository information
             SOURCE_DEFAULT_BRANCH=$(git remote show origin | sed -n '/HEAD branch/s/.*: //p')
             SOURCE_COMMIT_COUNT=$(git rev-list --count HEAD)
@@ -86,6 +87,54 @@ jobs:
               BUILD_TYPE="dotnet"
             fi
             echo "Detected build type: $BUILD_TYPE"
+
+            # DETECT AND ENABLE LFS FOR FILES > 20MB - SOURCE
+
+            LFS_ENABLED=false
+            LARGE_FILES=$(find . -not -path './.git/*' -size +20M)
+
+            if [ -n "$LARGE_FILES" ]; then
+              echo "Large files detected (>20MB), enabling Git LFS..."
+              LFS_ENABLED=true
+
+              git lfs install
+
+              # FIX: Set git identity BEFORE lfs migrate (was after, causing failure)
+              git config user.email "lfs-migration@pipeline.ci"
+              git config user.name "LFS Migration Bot"
+
+              echo "$LARGE_FILES" | while read filepath; do
+                ext="${filepath##*.}"
+                filename="${filepath##*/}"
+                echo "Tracking large file: $filepath"
+
+                # Track by extension if it has one, otherwise by exact filename
+                if [ "$ext" != "$filename" ]; then
+                  git lfs track "*.${ext}"
+                else
+                  git lfs track "$filename"
+                fi
+              done
+
+              git add .gitattributes
+
+              # FIX: Parse patterns from .gitattributes instead of 'git lfs track'
+              # (avoids header line "Listing tracked patterns" corrupting --include value)
+              INCLUDE_PATTERNS=$(grep 'filter=lfs' .gitattributes | awk '{print $1}' | paste -sd, -)
+              echo "LFS include patterns: $INCLUDE_PATTERNS"
+
+              # Migrate existing history to LFS
+              git lfs migrate import --include="$INCLUDE_PATTERNS" --everything
+
+              git add -A
+              git diff --cached --quiet || git commit -m "chore: enable Git LFS for large files (>20MB)"
+
+              # FIX: Use --force because lfs migrate rewrites history (changes commit SHAs)
+              git push --force "https://x-access-token:${GH_SOURCE_PAT}@github.com/${SOURCE_ORG}/${SOURCE_REPO}.git" HEAD
+              echo "LFS enabled and large files migrated on source repo."
+            else
+              echo "No files >20MB found. LFS not required."
+            fi
 
             # SONAR SCAN - SOURCE
 
@@ -148,6 +197,7 @@ jobs:
 
               continue
             fi
+
             # CLONE TARGET REPO
 
             git clone "https://x-access-token:${GH_TARGET_PAT}@github.com/${TARGET_ORG}/${TARGET_REPO}.git" "target-${TARGET_REPO}"
@@ -160,6 +210,21 @@ jobs:
             TARGET_BRANCH_COUNT=$(git branch -a | grep -v HEAD | wc -l)
             TARGET_LATEST_COMMIT=$(git rev-parse HEAD)
             echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,SUCCESS,$SOURCE_DEFAULT_BRANCH,$TARGET_DEFAULT_BRANCH,$SOURCE_COMMIT_COUNT,$TARGET_COMMIT_COUNT,$SOURCE_BRANCH_COUNT,$TARGET_BRANCH_COUNT,$SOURCE_LATEST_COMMIT,$TARGET_LATEST_COMMIT,$LATEST_COMMIT_AUTHOR,$LATEST_COMMIT_DATE" >> $REPORT_FILE
+
+            # VERIFY LFS ON TARGET REPO
+
+            if [ "$LFS_ENABLED" = "true" ]; then
+              echo "Verifying LFS pointers on target repo..."
+              git lfs install
+              git lfs pull
+              MISSING_LFS=$(git lfs status 2>&1 | grep -i "error" || true)
+              if [ -n "$MISSING_LFS" ]; then
+                echo "WARNING: LFS verification issues found on target: $MISSING_LFS"
+              else
+                echo "LFS verification passed on target repo."
+              fi
+            fi
+
             sonar-scanner \
               -Dsonar.projectKey=${TARGET_REPO}-target \
               -Dsonar.organization=aberlia-org \
