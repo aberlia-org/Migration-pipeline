@@ -142,6 +142,7 @@ jobs:
               -Dsonar.projectKey=${SOURCE_REPO}-source \
               -Dsonar.organization=aberlia-org \
               -Dsonar.sources=. \
+              -Dsonar.java.binaries=. \
               -Dsonar.host.url=$SONAR_HOST_URL \
               -Dsonar.login=$SONAR_TOKEN
 
@@ -229,6 +230,7 @@ jobs:
               -Dsonar.projectKey=${TARGET_REPO}-target \
               -Dsonar.organization=aberlia-org \
               -Dsonar.sources=. \
+              -Dsonar.java.binaries=. \
               -Dsonar.host.url=$SONAR_HOST_URL \
               -Dsonar.login=$SONAR_TOKEN
             cd ..
