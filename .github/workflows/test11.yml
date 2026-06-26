@@ -1,0 +1,365 @@
+name: Migration + Sonar + Gitleaks AnalysisMainReadvalid
+
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate-and-scan:
+    runs-on: ubuntu-latest
+    steps:
+
+      # CHECKOUT PIPELINE REPO
+
+      - name: Checkout pipeline repo
+        uses: actions/checkout@v3
+        with:
+          lfs: true
+
+      # INSTALL GEI
+
+      - name: Install GHE extension
+        env:
+          GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
+        run: |
+          gh extension install github/gh-gei
+
+      # INSTALL SONAR SCANNER
+
+      - name: Install Sonar Scanner
+        run: |
+          curl -sSLo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+          unzip sonar-scanner.zip
+          mv sonar-scanner-* sonar-scanner
+          echo "$PWD/sonar-scanner/bin" >> $GITHUB_PATH
+
+      # INSTALL GITLEAKS
+
+      - name: Install Gitleaks
+        run: |
+          wget https://github.com/gitleaks/gitleaks/releases/download/v8.18.2/gitleaks_8.18.2_linux_x64.tar.gz
+          tar -xzf gitleaks_8.18.2_linux_x64.tar.gz
+          chmod +x gitleaks
+          sudo mv gitleaks /usr/local/bin/
+
+      - name: Provision Enterprise Quality Gate and Profiles
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          echo "=== PROVISIONING ENTERPRISE QUALITY GATE ==="
+
+          sonar_api() {
+            curl -sf -u "${SONAR_TOKEN}:" "$@"
+          }
+
+          GATE_NAME="Opella-Enterprise-Gate"
+
+          EXISTING_GATE=$(sonar_api \
+            "${SONAR_HOST_URL}/api/qualitygates/list" \
+            | python3 -c "
+          import sys, json
+          gates = json.load(sys.stdin).get('qualitygates', [])
+          match = next((g for g in gates if g['name'] == '${GATE_NAME}'), None)
+          print(match['id'] if match else '')
+          " 2>/dev/null || echo "")
+
+          if [ -z "$EXISTING_GATE" ]; then
+            echo "Creating quality gate: $GATE_NAME"
+            GATE_ID=$(sonar_api -X POST \
+              "${SONAR_HOST_URL}/api/qualitygates/create" \
+              --data-urlencode "name=${GATE_NAME}" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          else
+            echo "Quality gate '$GATE_NAME' already exists (id=$EXISTING_GATE)"
+            GATE_ID=$EXISTING_GATE
+          fi
+
+          echo "Gate ID: $GATE_ID"
+
+          add_condition() {
+            METRIC=$1; OPERATOR=$2; ERROR_THRESHOLD=$3
+            sonar_api -X POST \
+              "${SONAR_HOST_URL}/api/qualitygates/create_condition" \
+              --data-urlencode "gateId=${GATE_ID}" \
+              --data-urlencode "metric=${METRIC}" \
+              --data-urlencode "op=${OPERATOR}" \
+              --data-urlencode "error=${ERROR_THRESHOLD}" \
+              > /dev/null 2>&1 || true
+          }
+
+          add_condition "new_bugs"                          "GT" "0"
+          add_condition "new_vulnerabilities"               "GT" "0"
+          add_condition "new_security_hotspots_reviewed"    "LT" "80"
+          add_condition "new_coverage"                      "LT" "70"
+          add_condition "new_duplicated_lines_density"      "GT" "5"
+          add_condition "new_maintainability_rating"        "GT" "2"
+          add_condition "new_reliability_rating"            "GT" "2"
+          add_condition "new_security_rating"               "GT" "2"
+
+          echo "Quality gate conditions set."
+
+          create_profile_if_missing() {
+            PROFILE_NAME=$1; LANG_KEY=$2; LANG_LABEL=$3
+
+            EXISTS=$(sonar_api \
+              "${SONAR_HOST_URL}/api/qualityprofiles/search?language=${LANG_KEY}&qualityProfile=${PROFILE_NAME}" \
+              | python3 -c "
+          import sys,json
+          profiles = json.load(sys.stdin).get('profiles', [])
+          print('yes' if profiles else 'no')
+          " 2>/dev/null || echo "no")
+
+            if [ "$EXISTS" = "no" ]; then
+              echo "Creating profile: $PROFILE_NAME ($LANG_LABEL)"
+              sonar_api -X POST \
+                "${SONAR_HOST_URL}/api/qualityprofiles/create" \
+                --data-urlencode "name=${PROFILE_NAME}" \
+                --data-urlencode "language=${LANG_KEY}" \
+                > /dev/null 2>&1 || echo "  Warning: Could not create profile for $LANG_LABEL (plugin may not be installed)"
+            else
+              echo "Profile '$PROFILE_NAME' ($LANG_LABEL) already exists."
+            fi
+          }
+
+          STRICT="Opella-Enterprise-Strict"
+          create_profile_if_missing "$STRICT" "java"    "Java"
+          create_profile_if_missing "$STRICT" "js"      "JavaScript"
+          create_profile_if_missing "$STRICT" "ts"      "TypeScript"
+          create_profile_if_missing "$STRICT" "py"      "Python"
+          create_profile_if_missing "$STRICT" "apex"    "Apex"
+          create_profile_if_missing "$STRICT" "plsql"   "PLSQL"
+          create_profile_if_missing "$STRICT" "plpgsql" "PLpgSQL"
+          create_profile_if_missing "$STRICT" "vbnet"   "VB.NET"
+
+          STANDARD="Opella-Enterprise-Standard"
+          create_profile_if_missing "$STANDARD" "php"   "PHP"
+          create_profile_if_missing "$STANDARD" "web"   "HTML"
+          create_profile_if_missing "$STANDARD" "css"   "CSS"
+          create_profile_if_missing "$STANDARD" "shell" "Shell"
+          create_profile_if_missing "$STANDARD" "dart"  "Dart"
+
+          echo "=== QUALITY GATE + PROFILES PROVISIONED ==="
+
+      # MAIN PROCESS
+
+      - name: Migrate and Scan Repos
+        env:
+          GH_TOKEN: ${{ secrets.GH_TARGET_PAT }}
+          GH_SOURCE_PAT: ${{ secrets.GH_SOURCE_PAT }}
+          GH_TARGET_PAT: ${{ secrets.GH_TARGET_PAT }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          echo "SourceRepo,TargetRepo,BuildType,Status,SourceDefaultBranch,TargetDefaultBranch,SourceCommitCount,TargetCommitCount,SourceBranchCount,TargetBranchCount,SourceLatestCommit,TargetLatestCommit,LatestCommitAuthor,LatestCommitDate" > migration_report.csv
+          sed -i 's/\r//' repos.txt
+          REPORT_FILE="$PWD/migration_report.csv"
+          echo "=== STARTING MAIN LOOP ==="
+          while IFS=',' read SOURCE_ORG SOURCE_REPO TARGET_ORG TARGET_REPO; do
+            echo "====================================="
+            echo "Processing source repo: $SOURCE_REPO"
+            echo "Target repo: $TARGET_REPO"
+            echo "====================================="
+
+            # CLONE SOURCE REPO
+
+            git clone "https://x-access-token:${GH_SOURCE_PAT}@github.com/${SOURCE_ORG}/${SOURCE_REPO}.git" "source-${SOURCE_REPO}"
+            cd source-${SOURCE_REPO}
+
+            # Source repository information
+            SOURCE_DEFAULT_BRANCH=$(git remote show origin | sed -n '/HEAD branch/s/.*: //p')
+            SOURCE_COMMIT_COUNT=$(git rev-list --count HEAD)
+            SOURCE_BRANCH_COUNT=$(git branch -r | grep -v HEAD | wc -l)
+            SOURCE_LATEST_COMMIT=$(git rev-parse HEAD)
+            LATEST_COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an')
+            LATEST_COMMIT_DATE=$(git log -1 --pretty=format:'%ad')
+
+            # DETECT BUILD TYPE
+
+            BUILD_TYPE="unknown"
+            if [ -f "pom.xml" ]; then
+              BUILD_TYPE="maven"
+            elif [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
+              BUILD_TYPE="gradle"
+            elif [ -f "package.json" ]; then
+              BUILD_TYPE="nodejs"
+            elif ls *.csproj *.sln >/dev/null 2>&1; then
+              BUILD_TYPE="dotnet"
+            fi
+            echo "Detected build type: $BUILD_TYPE"
+
+            # DETECT AND ENABLE LFS FOR FILES > 20MB - SOURCE
+
+            LFS_ENABLED=false
+            LARGE_FILES=$(find . -not -path './.git/*' -size +20M)
+
+            if [ -n "$LARGE_FILES" ]; then
+              echo "Large files detected (>20MB), enabling Git LFS..."
+              LFS_ENABLED=true
+
+              git lfs install
+
+              # FIX: Set git identity BEFORE lfs migrate (was after, causing failure)
+              git config user.email "lfs-migration@pipeline.ci"
+              git config user.name "LFS Migration Bot"
+
+              echo "$LARGE_FILES" | while read filepath; do
+                ext="${filepath##*.}"
+                filename="${filepath##*/}"
+                echo "Tracking large file: $filepath"
+
+                # Track by extension if it has one, otherwise by exact filename
+                if [ "$ext" != "$filename" ]; then
+                  git lfs track "*.${ext}"
+                else
+                  git lfs track "$filename"
+                fi
+              done
+
+              git add .gitattributes
+
+              # FIX: Parse patterns from .gitattributes instead of 'git lfs track'
+              # (avoids header line "Listing tracked patterns" corrupting --include value)
+              INCLUDE_PATTERNS=$(grep 'filter=lfs' .gitattributes | awk '{print $1}' | paste -sd, -)
+              echo "LFS include patterns: $INCLUDE_PATTERNS"
+
+              # Migrate existing history to LFS
+              git lfs migrate import --include="$INCLUDE_PATTERNS" --everything
+
+              git add -A
+              git diff --cached --quiet || git commit -m "chore: enable Git LFS for large files (>20MB)"
+
+              # FIX: Use --force because lfs migrate rewrites history (changes commit SHAs)
+              git push --force "https://x-access-token:${GH_SOURCE_PAT}@github.com/${SOURCE_ORG}/${SOURCE_REPO}.git" HEAD
+              echo "LFS enabled and large files migrated on source repo."
+            else
+              echo "No files >20MB found. LFS not required."
+            fi
+
+            # SONAR SCAN - SOURCE
+
+            sonar-scanner \
+              -Dsonar.projectKey=${SOURCE_REPO}-source \
+              -Dsonar.organization=aberlia-org \
+              -Dsonar.sources=. \
+              -Dsonar.java.binaries=. \
+              -Dsonar.python.version=3 \
+              -Dsonar.host.url=$SONAR_HOST_URL \
+              -Dsonar.login=$SONAR_TOKEN \
+              -Dsonar.qualitygate.wait=false \
+              -Dsonar.exclusions="**/*.min.js,**/*.min.css,**/*.generated.*,**/vendor/**,**/__pycache__/**,**/.ipynb_checkpoints/**,**/node_modules/**,**/.venv/**,**/dist/**,**/build/**,**/*.lock,**/*.r,**/*.R,**/*.ipynb,**/*.tf,**/*.hcl,**/*.bat,**/*.cmd,**/*.xslt,**/*.xsl,**/*.ftl,**/*.hbs,**/*.handlebars,**/*.em,**/*.dcl,Dockerfile,**/Dockerfile.*" \
+              -Dsonar.coverage.exclusions="**/*test*/**,**/*Test*,**/*Spec*,**/*_test.*,**/*_spec.*" \
+              -Dsonar.cpd.exclusions="**/*test*/**,**/*Test*,**/*Spec*"
+
+            # GITLEAKS SCAN - SOURCE
+
+            gitleaks detect \
+              --source . \
+              --report-path ../${SOURCE_REPO}-gitleaks-report.json \
+              --verbose
+            cd ..
+            rm -rf source-${SOURCE_REPO}
+
+            # MIGRATION
+
+            migration_success=false
+
+            for attempt in 1 2 3
+            do
+              echo "Migration attempt $attempt for $SOURCE_REPO"
+
+              if gh gei migrate-repo \
+                  --github-source-org "$SOURCE_ORG" \
+                  --github-target-org "$TARGET_ORG" \
+                  --source-repo "$SOURCE_REPO" \
+                  --target-repo "$TARGET_REPO" \
+                  --github-source-pat "$GH_SOURCE_PAT" \
+                  --github-target-pat "$GH_TARGET_PAT"
+              then
+                  migration_success=true
+                  break
+              fi
+
+              echo "Attempt $attempt failed"
+              sleep 30
+            done
+
+            if [ "$migration_success" != "true" ]; then
+              echo "Migration failed after 3 attempts"
+
+              echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,FAILED,MIGRATION_ERROR" >> $REPORT_FILE
+
+              continue
+            fi
+
+            if GH_TOKEN=$GH_TARGET_PAT gh repo view $TARGET_ORG/$TARGET_REPO >/dev/null 2>&1
+            then
+              echo "Validation successful: Target repository exists"
+        
+            else
+              echo "Validation failed: Repository not found after migration"
+
+              echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,FAILED,VALIDATION_ERROR" >> $REPORT_FILE
+
+              continue
+            fi
+
+            # CLONE TARGET REPO
+
+            git clone "https://x-access-token:${GH_TARGET_PAT}@github.com/${TARGET_ORG}/${TARGET_REPO}.git" "target-${TARGET_REPO}"
+            cd target-${TARGET_REPO}
+            echo "Target Org: $TARGET_ORG"
+            echo "Target Repo: $TARGET_REPO"
+            GH_TOKEN=$GH_TARGET_PAT gh repo view ${TARGET_ORG}/${TARGET_REPO}
+            TARGET_DEFAULT_BRANCH=$(git remote show origin | sed -n '/HEAD branch/s/.*: //p')
+            TARGET_COMMIT_COUNT=$(git rev-list --count HEAD)
+            TARGET_BRANCH_COUNT=$(git branch -a | grep -v HEAD | wc -l)
+            TARGET_LATEST_COMMIT=$(git rev-parse HEAD)
+            echo "$SOURCE_REPO,$TARGET_REPO,$BUILD_TYPE,SUCCESS,$SOURCE_DEFAULT_BRANCH,$TARGET_DEFAULT_BRANCH,$SOURCE_COMMIT_COUNT,$TARGET_COMMIT_COUNT,$SOURCE_BRANCH_COUNT,$TARGET_BRANCH_COUNT,$SOURCE_LATEST_COMMIT,$TARGET_LATEST_COMMIT,$LATEST_COMMIT_AUTHOR,$LATEST_COMMIT_DATE" >> $REPORT_FILE
+
+            # VERIFY LFS ON TARGET REPO
+
+            if [ "$LFS_ENABLED" = "true" ]; then
+              echo "Verifying LFS pointers on target repo..."
+              git lfs install
+              git lfs pull
+              MISSING_LFS=$(git lfs status 2>&1 | grep -i "error" || true)
+              if [ -n "$MISSING_LFS" ]; then
+                echo "WARNING: LFS verification issues found on target: $MISSING_LFS"
+              else
+                echo "LFS verification passed on target repo."
+              fi
+            fi
+
+            # SONAR SCAN - TARGET
+
+            sonar-scanner \
+              -Dsonar.projectKey=${TARGET_REPO}-target \
+              -Dsonar.organization=aberlia-org \
+              -Dsonar.sources=. \
+              -Dsonar.java.binaries=. \
+              -Dsonar.python.version=3 \
+              -Dsonar.host.url=$SONAR_HOST_URL \
+              -Dsonar.login=$SONAR_TOKEN \
+              -Dsonar.qualitygate.wait=false \
+              -Dsonar.exclusions="**/*.min.js,**/*.min.css,**/*.generated.*,**/vendor/**,**/__pycache__/**,**/.ipynb_checkpoints/**,**/node_modules/**,**/.venv/**,**/dist/**,**/build/**,**/*.lock,**/*.r,**/*.R,**/*.ipynb,**/*.tf,**/*.hcl,**/*.bat,**/*.cmd,**/*.xslt,**/*.xsl,**/*.ftl,**/*.hbs,**/*.handlebars,**/*.em,**/*.dcl,Dockerfile,**/Dockerfile.*" \
+              -Dsonar.coverage.exclusions="**/*test*/**,**/*Test*,**/*Spec*,**/*_test.*,**/*_spec.*" \
+              -Dsonar.cpd.exclusions="**/*test*/**,**/*Test*,**/*Spec*"
+            cd ..
+            rm -rf target-${TARGET_REPO}
+          done < repos.txt
+
+      # UPLOAD GITLEAKS REPORTS
+
+      - name: Upload Gitleaks Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-reports
+          path: "*.json"
+
+      - name: Upload Consolidated CSV Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-csv-report
+          path: migration_report.csv
