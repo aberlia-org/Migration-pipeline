@@ -65,10 +65,18 @@ jobs:
 
           if [ -z "$EXISTING_GATE" ]; then
             echo "Creating quality gate: $GATE_NAME"
-            GATE_ID=$(sonar_api -X POST \
+            sonar_api -X POST \
               "${SONAR_HOST_URL}/api/qualitygates/create" \
               --data-urlencode "name=${GATE_NAME}" \
-              | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+              > /dev/null
+            GATE_ID=$(sonar_api \
+              "${SONAR_HOST_URL}/api/qualitygates/list" \
+              | python3 -c "
+          import sys, json
+          gates = json.load(sys.stdin).get('qualitygates', [])
+          match = next((g for g in gates if g['name'] == '${GATE_NAME}'), None)
+          print(match['id'] if match else '')
+          ")
           else
             echo "Quality gate '$GATE_NAME' already exists (id=$EXISTING_GATE)"
             GATE_ID=$EXISTING_GATE
