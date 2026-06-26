@@ -69,6 +69,7 @@ jobs:
               "${SONAR_HOST_URL}/api/qualitygates/create" \
               --data-urlencode "name=${GATE_NAME}" \
               > /dev/null || true
+            sleep 2
           else
             echo "Quality gate '$GATE_NAME' already exists (id=$EXISTING_GATE)"
           fi
@@ -80,7 +81,7 @@ jobs:
           gates = json.load(sys.stdin).get('qualitygates', [])
           match = next((g for g in gates if g['name'] == '${GATE_NAME}'), None)
           print(match['id'] if match else '')
-          ")
+          " 2>/dev/null || echo "")
           echo "Gate ID: $GATE_ID"
 
           add_condition() {
