@@ -1,0 +1,16 @@
+name: Test Secret Upload
+
+on:
+  workflow_dispatch:
+
+jobs:
+  call-upload:
+    uses: ./.github/workflows/upload-secret-to-keyvault.yml
+    with:
+      vault-name: kv-secrets-ambika-01
+      secrets-file: secrets.txt
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
